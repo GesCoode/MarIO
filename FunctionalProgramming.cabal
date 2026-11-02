@@ -1,8 +1,6 @@
 cabal-version:      3.0
 name:               FunctionalProgramming
 version:            0.1.0.0
-license:            MIT
-license-file:       LICENSE
 author:             jeroenversteegh
 maintainer:         jeroenversteegh@gmail.com
 build-type:         Simple
