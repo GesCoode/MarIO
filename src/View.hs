@@ -36,7 +36,7 @@ drawPlaying atlas gs =
   pictures
     [ color black (rectangleSolid 800 600)
     , pictures (map (drawStatic atlas (gsDebug gs)) (lvlStatics (gsLevel gs)))
-    , drawPlayer (gsDebug gs) (gsPlayer gs)
+    , pictures (zipWith (drawPlayer atlas (gsDebug gs)) playerChars (gsPlayers gs))
     , cornerLabel (levelName (lvlId (gsLevel gs)))
     ]
 
@@ -52,13 +52,27 @@ drawStatic atlas debug s =
       Just pic -> pic
       Nothing  -> color white $ rectangleSolid (soWidth s) (soHeight s)
 
-drawPlayer :: Bool -> Player -> Picture
-drawPlayer debug p =
+-- Player 0 is Mario, player 1 is Luigi (sprite name prefix).
+playerChars :: [Char]
+playerChars = "ML"
+
+-- Sprite name: "MJR" (jump), "ML2" (walk frame), ...
+playerSprite :: Char -> Player -> String
+playerSprite ch p
+  | onGround p = [ch, dir] ++ show frame
+  | otherwise  = [ch, 'J', dir]
+  where
+    dir   = if facingRight p then 'R' else 'L'
+    frame = (floor (walkPhase p) :: Int) `mod` 3
+
+drawPlayer :: SpriteAtlas -> Bool -> Char -> Player -> Picture
+drawPlayer atlas debug ch p =
   translate (x c) (y c) $
     if debug
       then color silverWire $ rectangleWire (hbWidth hb) (hbHeight hb)
-      else color (makeColor 0.2 0.6 1.0 1.0) $
-             rectangleSolid (playerW p) (playerH p)
+      else case lookup (playerSprite ch p) atlas of
+             Just pic -> scale 2 2 pic
+             Nothing  -> color white $ rectangleSolid (playerW p) (playerH p)
   where
     c  = playerPos p
     hb = playerHitbox p

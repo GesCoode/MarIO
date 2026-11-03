@@ -21,9 +21,15 @@ loadSprite name path = do
 
 loadSprites :: IO SpriteAtlas
 loadSprites = do
-  block <- loadSprite "block" "assets/block.bmp"
-  -- Add more sprites here
-  pure [block]
+  mapM (\n -> loadSprite n ("assets/" ++ n ++ ".bmp")) ("block" : characterSprites)
+
+-- For M (Mario) and L (Luigi): death, jump left/right, walk left/right frames 0-2.
+characterSprites :: [String]
+characterSprites =
+  [ c : rest
+  | c <- "ML"
+  , rest <- ["D", "JL", "JR"] ++ [d : show i | d <- "LR", i <- [0 .. 2 :: Int]]
+  ]
 
 main :: IO ()
 main = do

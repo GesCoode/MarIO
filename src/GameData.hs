@@ -3,24 +3,35 @@ module GameData where
 import Graphics.Gloss (Picture)
 
 -- | 2D point / vector. Object positions use the center.
-data Vec2 = Vec2 {x :: Float, y :: Float}
+data Vec2 = Vec2 {
+    x :: Float, 
+    y :: Float}
     deriving (Eq)
 
 -- AABB: center + width + height.
-data Hitbox = Hitbox {hbCenter :: Vec2, hbWidth :: Float, hbHeight :: Float}
+data Hitbox = Hitbox {
+    hbCenter :: Vec2, 
+    hbWidth :: Float, 
+    hbHeight :: Float}
     deriving (Eq)
 
 -- Static level object (platform, block, …).
-data StaticObj = StaticObj {soCenter :: Vec2, soWidth :: Float, soHeight :: Float, soSprite :: String}
+data StaticObj = StaticObj {
+    soCenter :: Vec2, 
+    soWidth :: Float, 
+    soHeight :: Float, 
+    soSprite :: String}
     deriving (Eq)
 
 -- Include direction
-data PlayerStart = PlayerStart {psCenter :: Vec2, psVel :: Vec2}
+data PlayerStart = PlayerStart {
+    psCenter :: Vec2, 
+    psVel :: Vec2}
     deriving (Eq)
 
 data LevelId = Sandbox | Level1 | Level2 | Level3
   deriving (Eq)
-
+  
 levelName :: LevelId -> String
 levelName Sandbox = "Sandbox"
 levelName Level1  = "Level 1"
@@ -34,36 +45,82 @@ levelPath Level2  = "levels/level2.json"
 levelPath Level3  = "levels/level3.json"
 
 -- | Parsed level payload (level id comes from which file was loaded).
-data LevelFile = LevelFile {lfStatics :: [StaticObj], lfPlayers :: [PlayerStart]}
+data LevelFile = LevelFile {
+    lfStatics :: [StaticObj], 
+    lfPlayers :: [PlayerStart]}
     deriving (Eq)
 
-data Level = Level { lvlId :: LevelId, lvlStatics :: [StaticObj], lvlPlayers :: [PlayerStart]}
+data Level = Level { 
+    lvlId :: LevelId, 
+    lvlStatics :: [StaticObj], 
+    lvlPlayers :: [PlayerStart]}
     deriving (Eq)
 
-data Player = Player { playerPos :: Vec2, playerVel :: Vec2, playerW :: Float, playerH :: Float}
+data Player = Player { 
+    playerPos :: Vec2, 
+    playerVel :: Vec2, 
+    playerW   :: Float, 
+    playerH   :: Float,
+    onGround  :: Bool,
+    playerIn  :: InputHandler,
+    facingRight :: Bool,    -- last walking direction
+    walkPhase   :: Float}   -- walk cycle progress; frame = floor walkPhase `mod` 3
     deriving (Eq)
 
--- Remove debug
-data GameState = GameState {gsLevel :: Level, gsPlayer :: Player, gsDebug :: Bool}
+data GameState = GameState {
+    gsLevel        :: Level, 
+    gsPlayers      :: [Player],   -- index 0 = WASD, index 1 = arrows
+    gsDebug        :: Bool}
 
 data Screen = Menu | Playing GameState
 
 type SpriteAtlas = [(String, Picture)]
 
-data AppState = AppState {screen :: Screen, sprites :: SpriteAtlas}
+data AppState = AppState {
+    screen :: Screen, 
+    sprites :: SpriteAtlas}
 
 initialApp :: SpriteAtlas -> AppState
 initialApp atlas = AppState Menu atlas
 
--- Redo this
+defaultPlayer :: Player
+defaultPlayer = Player
+    { playerPos = Vec2 0 0
+    , playerVel = Vec2 0 0
+    , playerW   = 32
+    , playerH   = 42          -- sprites are 16x21, drawn at 2x
+    , onGround  = False
+    , playerIn  = noInput
+    , facingRight = True
+    , walkPhase   = 0
+    }
+
+spawnPlayer :: PlayerStart -> Player
+spawnPlayer ps = defaultPlayer { playerPos = psCenter ps, playerVel = psVel ps }
+
 mkGameState :: Level -> GameState
 mkGameState lvl = GameState
-    { gsLevel = lvl
-  , gsPlayer = case lvlPlayers lvl of
-      (p:_) -> Player (psCenter p) (psVel p) 32 32
-      []    -> Player (Vec2 0 0) (Vec2 0 0) 32 32
-  , gsDebug  = True
-  }
+    { gsLevel        = lvl
+    , gsPlayers      = take 2 (starts ++ fallback)
+    , gsDebug        = True
+    }
+  where
+    starts   = map spawnPlayer (lvlPlayers lvl)
+    -- if the level defines fewer than 2 spawns, place extra players next to the first
+    base     = case starts of
+                 (p:_) -> p
+                 []    -> defaultPlayer
+    fallback = [ base { playerPos = Vec2 (x (playerPos base) + 48 * fromIntegral i) (y (playerPos base)) }
+               | i <- [length starts ..] :: [Int] ]
+
+data InputHandler = InputHandler {
+    inLeft  :: Bool,
+    inRight :: Bool,
+    inJump  :: Bool}
+    deriving (Eq)
+
+noInput :: InputHandler
+noInput = InputHandler False False False
 
 staticHitbox :: StaticObj -> Hitbox
 staticHitbox s = Hitbox (soCenter s) (soWidth s) (soHeight s)
