@@ -22,13 +22,13 @@ import Text.ParserCombinators.ReadP (
 -- | Read level (obj, players, enemies) 
 parseLevelFile :: String -> Either String LevelFile 
 parseLevelFile content = 
-    case [lvl | (lvl, "") <-- readP_to_S parse content] of
+    case [lvl | (lvl, "") <- readP_to_S parse content] of
         [] -> Left "Invalid file: check please."
         (lvl : _)
             | all validObj (lfStatics lvl) -> Right lvl
             | otherwise -> Left "Object has invalid dimensions or name."
-        where 
-            parse = skipSpaces *> readLvl <* skipSpaces <* eof
+    where 
+            parse = skipSpaces *> readLevel <* skipSpaces <* eof
 
 -- | Read a value between [ ] 
 lst :: ReadP a -> ReadP [a]
@@ -37,7 +37,7 @@ lst el = between (sym '[') (sym ']')
 
 -- | Read a symbol + skip spaces
 sym :: Char -> ReadP Char
-sym tkn == skipSpaces *> char tkn <* skipSpaces
+sym tkn = skipSpaces *> char tkn <* skipSpaces
 
 -- | Numbers 
 num :: ReadP Float
@@ -60,7 +60,7 @@ readLevel = between (sym '[') (sym ']') $
     
 readObj :: ReadP StaticObj
 readObj = between (sym '[') (sym ']') $
-    StaticObj <$> vector <* sym ','
+    StaticObj <$> vec <* sym ','
     <*> num <* sym ','
     <*> num <* sym ','
     <*> text

@@ -75,7 +75,7 @@ data Level = Level {
 data InputHandler = InputHandler {
     inLeft :: Bool,
     inRight :: Bool,
-    inJump :: Bool
+    inJump :: Bool}
     deriving (Eq)
    
 noInput :: InputHandler
@@ -218,18 +218,13 @@ mkGameState select lvl
             fallback = 
                 [ base { playerPos = pos, playerSpawn = pos }
                 | i <- [length startpos .. selectPlayer select - 1] :: [Int]
-                , let pos = Vec2 
-                    (x (playerPos base) + 48 * fromIntegral i) 
-                    (y (playerPos base)) ]
+                , let pos = Vec2 (x (playerPos base) + 48 * fromIntegral i) (y (playerPos base)) ]
 
 staticHitbox :: StaticObj -> Hitbox
 staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object)
 
 playerHitbox :: Player -> Hitbox
 playerHitbox player = Hitbox (playerPos player) (playerW player) (playerH player)
-
-enemyHitbox :: Enemy -> Hitbox
-enemyHitbox enemy = Hitbox (enemyPos enemy)  (enemyW enemy) (enemyH enemy)
 
 -- | AABB-overlap: collision at edge does not count as overlap
 overlaps :: Hitbox -> Hitbox -> Bool

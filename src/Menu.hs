@@ -15,7 +15,7 @@ import GameData (LevelId (..), PlayerSelect (..))
 
 menuW, menuH :: Float
 menuW = 360
-menu H = 50
+menuH = 50
 
 menuButtons :: [(LevelId, Float)]
 menuButtons = 
@@ -36,13 +36,13 @@ playerBtn = [(SinglePlayer, -105), (TwoPlayer, 105)]
 hitTest :: (Float, Float) -> Maybe LevelId
 hitTest (mx, my) = listToMaybe
     [ lvl 
-    | (level, midY) <- menuButtons
+    | (lvl, midY) <- menuButtons
     , abs mx <= menuW / 2
     , abs (my - midY) <= menuH / 2 ]
     
 hitTestPlayers :: (Float, Float) -> Maybe PlayerSelect
 hitTestPlayers (mx, my) = listToMaybe
     [ select
-    | (select midX) <- playerBtn
+    | (select, midX) <- playerBtn
     , abs (mx - midX) <= playerBtnW / 2
     , abs (my - playerBtnY) <= playerBtnH / 2]

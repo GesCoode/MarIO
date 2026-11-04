@@ -25,7 +25,7 @@ import GameData
     , mkGameState
     )
 import LevelLoad (loadLevel)
-import Menu (hitTest)
+import Menu (hitTest, hitTestPlayers)
 import Physics (stepWorld)
 
 handleEvent :: Event -> AppState -> IO AppState
@@ -35,7 +35,7 @@ handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
             Just select -> pure app { playerSelect = select }
             Nothing -> case hitTest mouse of 
                 Nothing  -> pure app
-                Just lvl -> loadLvl lvl app
+                Just lvl -> startLevel lvl app
         Playing _ -> pure app
         
 handleEvent (EventKey (SpecialKey KeyEsc) Down _ _) app =
@@ -44,21 +44,21 @@ handleEvent (EventKey (SpecialKey KeyEsc) Down _ _) app =
 -- | Pause, toggel or restart
 handleEvent (EventKey (Char tkn) Down _ _) app
     | toLower tkn == 'p' = 
-        pure (adjustGs app (\gs -> gs { gsPaused = not (gsPaused gs) }))
+        pure (mapPlaying app (\gs -> gs { gsPaused = not (gsPaused gs) }))
     | toLower tkn == 'c' = 
-        pure (adjustGs app (\gs -> gs { gsDebug = not (gsDebug gs) }))
+        pure (mapPlaying app (\gs -> gs { gsDebug = not (gsDebug gs) }))
     | toLower tkn == 'r' = 
-        pure (adjustGs app resetSandbox)
+        pure (mapPlaying app resetSandbox)
         
 -- | Process pressing and letting go of movement keys 
 handleEvent (EventKey key keyState _ _) app =
-    pure (adjustGs app (processKey key (state == down)))
+    pure (mapPlaying app (applyKey key (keyState == Down)))
 handleEvent _ app = pure app
 
 -- | Load level and create chosen players
 --   Loading error: menu stays visible --> error goes to stderr
-loadLevel :: LevelId -> AppState -> IO AppState
-loadLevel lvl app = do
+startLevel :: LevelId -> AppState -> IO AppState
+startLevel lvl app = do
     res <- try (loadLevel lvl) :: IO (Either IOException Level)
     case res of 
         Left err -> do

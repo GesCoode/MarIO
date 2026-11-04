@@ -2,7 +2,7 @@ module Physics
     ( stepWorld
     ) where
 
-import Data.List (foldl', mapAccumL, minimumBy)
+import Data.List (mapAccumL, minimumBy)
 import Data.Ord (comparing)
 
 import GameData
@@ -33,7 +33,7 @@ stepWorld dt gs
     | gsPaused gs = gs
     | otherwise = gs { 
         gsPlayers = ps3,
-        gsGoomas = filter onScreen gbs2,
+        gsGoombas = filter onScreen gbs2,
         gsRng = rng1,
         gsBros = filter broOnScreen bros2,
         gsHammers = filter hammerOnScreen (hams1 ++ thrown)}
@@ -179,30 +179,30 @@ stepGoomba dt solids rng gb = case gState gb of
         boxAt p = (goombaHitbox gb) { hbCenter = p }
         below (Vec2 px py) = Vec2 px (py - 2)
 
-    walk g =
-          let Vec2 px py = gPos g
-              dir        = gDir g
-              vx         = dir * goombaSpeed
-              vy         = max (-maxFallSpeed) (y (gVel g) - gravity * dt)
-              -- horizontal: flip on a wall, or at a ledge when standing on ground
-              nextX      = Vec2 (px + vx * dt) py
-              grounded   = hits (boxAt (below (gPos g)))
-              -- small probe just under the front foot
-              footProbe  = Hitbox (Vec2 (x nextX + dir * goombaW / 2) (py - goombaH / 2 - 2)) 2 2
-              ledge      = grounded && not (hits footProbe)
-              (pos1, dir1)
-                  | hits (boxAt nextX) || ledge = (gPos g, -dir)
-                  | otherwise                   = (nextX, dir)
-              -- vertical
-              nextY      = Vec2 (x pos1) (y pos1 + vy * dt)
-              (pos2, vy1)
-                  | hits (boxAt nextY) = (pos1, 0)
-                  | otherwise          = (nextY, vy)
-          in g { 
-              gPos = pos2, 
-              gVel = Vec2 vx vy1, 
-              gDir = dir1, 
-              gPhase = gPhase g + abs vx * dt / stepLength }
+        walk g =
+            let Vec2 px py = gPos g
+                dir        = gDir g
+                vx         = dir * goombaSpeed
+                vy         = max (-maxFallSpeed) (y (gVel g) - gravity * dt)
+                -- horizontal: flip on a wall, or at a ledge when standing on ground
+                nextX      = Vec2 (px + vx * dt) py
+                grounded   = hits (boxAt (below (gPos g)))
+                -- small probe just under the front foot
+                footProbe  = Hitbox (Vec2 (x nextX + dir * goombaW / 2) (py - goombaH / 2 - 2)) 2 2
+                ledge      = grounded && not (hits footProbe)
+                (pos1, dir1)
+                    | hits (boxAt nextX) || ledge = (gPos g, -dir)
+                    | otherwise                   = (nextX, dir)
+                -- vertical
+                nextY      = Vec2 (x pos1) (y pos1 + vy * dt)
+                (pos2, vy1)
+                    | hits (boxAt nextY) = (pos1, 0)
+                    | otherwise          = (nextY, vy)
+            in g { 
+                gPos = pos2, 
+                gVel = Vec2 vx vy1, 
+                gDir = dir1, 
+                gPhase = gPhase g + abs vx * dt / stepLength }
 
 -- Each walking goomba checks the players in order; first touching player wins.
 resolveHits :: [Player] -> [Goomba] -> ([Player], [Goomba])
