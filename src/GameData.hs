@@ -203,11 +203,18 @@ noInput :: InputHandler
 noInput = InputHandler False False False
 
 staticHitbox :: StaticObj -> Hitbox
-staticHitbox s = Hitbox (soCenter s) (soWidth s) (soHeight s)
+staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object)
 
 playerHitbox :: Player -> Hitbox
-playerHitbox p = Hitbox (playerPos p) (playerW p) (playerH p)
+playerHitbox player = Hitbox (playerPos player) (playerW player) (playerH player)
 
+enemyHitbox :: Enemy -> Hitbox
+enemyHitbox enemy = Hitbox (enemyPos enemy)  (enemyW enemy) (enemyH enemy)
+
+projectileHitbox :: Projectile -> Hitbox 
+projectileHitbox projectile = Hitbox (projectilePos projectile) 10 10 -- Adjust
+
+-- | AABB-overlap: collision at edge does not count as overlap
 overlaps :: Hitbox -> Hitbox -> Bool
 overlaps a b =
   abs (x (hbCenter a) - x (hbCenter b)) < (hbWidth a + hbWidth b) / 2 &&
