@@ -36,7 +36,8 @@ data GoombaStart = GoombaStart {
     deriving (Eq)
 
 -- Hammer Bro spawn: center only (he never moves).
-newtype BroStart = BroStart { bsCenter :: Vec2 }
+newtype BroStart = BroStart { 
+    bsCenter :: Vec2 }
     deriving (Eq)
 
 data LevelId = Sandbox | Level1 | Level2 | Level3
@@ -49,10 +50,10 @@ levelName Level2  = "Level 2"
 levelName Level3  = "Level 3"
 
 levelPath :: LevelId -> FilePath
-levelPath Sandbox = "levels/sandbox.json"
-levelPath Level1  = "levels/level1.json"
-levelPath Level2  = "levels/level2.json"
-levelPath Level3  = "levels/level3.json"
+levelPath Sandbox = "Levels/sandbox.json"
+levelPath Level1  = "Levels/level1.json"
+levelPath Level2  = "Levels/level2.json"
+levelPath Level3  = "Levels/level3.json"
 
 -- | Parsed level payload (level id comes from which file was loaded).
 data LevelFile = LevelFile {
@@ -70,6 +71,25 @@ data Level = Level {
     lvlBros    :: [BroStart]}
     deriving (Eq)
 
+-- | Controls for one player
+data InputHandler = InputHandler {
+    lvlId      :: LevelId,
+    lvlStatics :: [StaticObj],
+    lvlPlayers :: [PlayerStart],
+    lvlGoombas :: [GoombaStart],
+    lvlBros    :: [BroStart]}
+    deriving (Eq)
+   
+noInput :: InputHandler
+noInput = InputHandler False False False
+
+data PlayerSelect = SinglePlayer | TwoPlayer
+    deriving (Eq)
+
+selectPlayer :: PlayerSelect -> Int
+selectPlayer SinglePlayer = 1
+selectPlayer TwoPlayer    = 2
+
 data Player = Player { 
     playerPos :: Vec2, 
     playerVel :: Vec2, 
@@ -82,16 +102,7 @@ data Player = Player {
     facingRight :: Bool,    -- last walking direction
     walkPhase   :: Float}   -- walk cycle progress; frame = floor walkPhase `mod` 3
     deriving (Eq)
-
-data GameState = GameState {
-    gsLevel        :: Level, 
-    gsPlayers      :: [Player],   -- index 0 = WASD, index 1 = arrows
-    gsGoombas      :: [Goomba],
-    gsBros         :: [HammerBro],
-    gsHammers      :: [Hammer],
-    gsRng          :: Int,        -- seed for random death arcs
-    gsDebug        :: Bool}
-
+    
 data GoombaState
     = Walking
     | Flat Float   -- squashed; seconds left before it flies off
@@ -120,14 +131,24 @@ data Hammer = Hammer {
     hamVel  :: Vec2,
     hamAnim :: Float}   -- time, drives the spin animation
     deriving (Eq)
+    
+goombaW, goombaH :: Float
+goombaW = 28   -- sprites are 14x15, drawn at 2x
+goombaH = 30
 
 broW, broH, hammerSize :: Float
 broW       = 36   -- idle sprite is 24x32 drawn at 2x; hitbox a bit narrower
 broH       = 60
 hammerSize = 20   -- sprite is 16x16 drawn at 2x; hitbox smaller
 
+spawnGoomba :: GoombaStart -> Goomba
+spawnGoomba s = Goomba (gsCenter s) (Vec2 0 0) (signum (gsDir s)) Walking 0
+
 spawnBro :: BroStart -> HammerBro
 spawnBro s = HammerBro (bsCenter s) 0 Nothing 0 False (Vec2 0 0)
+
+goombaHitbox :: Goomba -> Hitbox
+goombaHitbox gb = Hitbox (gPos gb) goombaW goombaH
 
 broHitbox :: HammerBro -> Hitbox
 broHitbox b = Hitbox (broPos b) broW broH
@@ -135,72 +156,71 @@ broHitbox b = Hitbox (broPos b) broW broH
 hammerHitbox :: Hammer -> Hitbox
 hammerHitbox h = Hitbox (hamPos h) hammerSize hammerSize
 
-goombaW, goombaH :: Float
-goombaW = 28   -- sprites are 14x15, drawn at 2x
-goombaH = 30
-
-spawnGoomba :: GoombaStart -> Goomba
-spawnGoomba s = Goomba (gsCenter s) (Vec2 0 0) (signum (gsDir s)) Walking 0
-
-goombaHitbox :: Goomba -> Hitbox
-goombaHitbox gb = Hitbox (gPos gb) goombaW goombaH
-
 data Screen = Menu | Playing GameState
 
 type SpriteAtlas = [(String, Picture)]
 
 data AppState = AppState {
-    screen :: Screen, 
-    sprites :: SpriteAtlas}
+    screen       :: Screen, 
+    sprites      :: SpriteAtlas,
+    playerSelect :: PlayerSelect}
 
 initialApp :: SpriteAtlas -> AppState
-initialApp atlas = AppState Menu atlas
+initialApp atlas = AppState Menu atlas SinglePlayer
+
+data GameState = GameState {
+    gsLevel        :: Level, 
+    gsPlayerSelect :: PlayerSelect,
+    gsPlayers      :: [Player],   -- index 0 = WASD, index 1 = arrows
+    gsGoombas      :: [Goomba],
+    gsBros         :: [HammerBro],
+    gsHammers      :: [Hammer],
+    gsRng          :: Int,        -- seed for random death arcs
+    gsDebug        :: Bool}
 
 defaultPlayer :: Player
-defaultPlayer = Player
-    { playerPos = Vec2 0 0
-    , playerVel = Vec2 0 0
-    , playerW   = 32
-    , playerH   = 42          -- sprites are 16x21, drawn at 2x
-    , onGround  = False
-    , playerIn  = noInput
-    , playerDead  = False
-    , playerSpawn = Vec2 0 0
-    , facingRight = True
-    , walkPhase   = 0
-    }
+defaultPlayer = Player { 
+    playerPos = Vec2 0 0, 
+    playerVel = Vec2 0 0, 
+    playerW   = 32, 
+    playerH   = 42,          -- sprites are 16x21, drawn at 2x
+    onGround  = False,
+    playerIn  = noInput,
+    playerDead  = False, 
+    playerSpawn = Vec2 0 0,
+    facingRight = True,
+    walkPhase   = 0}
 
 spawnPlayer :: PlayerStart -> Player
-spawnPlayer ps = defaultPlayer { playerPos = psCenter ps, playerVel = psVel ps, playerSpawn = psCenter ps }
+spawnPlayer ps = defaultPlayer { 
+    playerPos = psCenter ps, 
+    playerVel = psVel ps, 
+    playerSpawn = psCenter ps}
 
-mkGameState :: Level -> GameState
-mkGameState lvl = GameState
-    { gsLevel        = lvl
-    , gsPlayers      = take 2 (starts ++ fallback)
-    , gsGoombas      = map spawnGoomba (lvlGoombas lvl)
-    , gsBros         = map spawnBro (lvlBros lvl)
-    , gsHammers      = []
-    , gsRng          = 12345
-    , gsDebug        = True
-    }
-  where
-    starts   = map spawnPlayer (lvlPlayers lvl)
-    -- if the level defines fewer than 2 spawns, place extra players next to the first
-    base     = case starts of
-                 (p:_) -> p
-                 []    -> defaultPlayer
-    fallback = [ base { playerPos = pos, playerSpawn = pos }
-               | i <- [length starts ..] :: [Int]
-               , let pos = Vec2 (x (playerPos base) + 48 * fromIntegral i) (y (playerPos base)) ]
-
-data InputHandler = InputHandler {
-    inLeft  :: Bool,
-    inRight :: Bool,
-    inJump  :: Bool}
-    deriving (Eq)
-
-noInput :: InputHandler
-noInput = InputHandler False False False
+mkGameState :: PlayerSelect -> Level ->  Either String GameState
+mkGameState select lvl = GameState {
+    gsLevel        = lvl,
+    gsPlayerSelect = select,
+    gsPlayers      = take (selectPlayer select) (startpos ++ fallback),
+    gsGoombas      = map spawnGoomba (lvlGoombas lvl),
+    gsBros         = map spawnBro (lvlBros lvl),
+    gsHammers      = [],
+    gsScore        = 0,
+    gsPaused       = False,
+    gsRng          = 12345,
+    gsDebug        = True}
+    where
+        startpos = map spawnPlayer (lvlPlayers level)
+        -- if the level defines fewer than 2 spawns, place extra players next to the first
+        base = case starts of
+            (p:_) -> p
+            []    -> defaultPlayer
+        fallback = 
+            [ base { playerPos = pos, playerSpawn = pos }
+            | i <- [length starts ..] :: [Int]
+            , let pos = Vec2 
+                (x (playerPos base) + 48 * fromIntegral i) 
+                (y (playerPos base)) ]
 
 staticHitbox :: StaticObj -> Hitbox
 staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object)
@@ -210,9 +230,6 @@ playerHitbox player = Hitbox (playerPos player) (playerW player) (playerH player
 
 enemyHitbox :: Enemy -> Hitbox
 enemyHitbox enemy = Hitbox (enemyPos enemy)  (enemyW enemy) (enemyH enemy)
-
-projectileHitbox :: Projectile -> Hitbox 
-projectileHitbox projectile = Hitbox (projectilePos projectile) 10 10 -- Adjust
 
 -- | AABB-overlap: collision at edge does not count as overlap
 overlaps :: Hitbox -> Hitbox -> Bool
