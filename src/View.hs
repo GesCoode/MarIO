@@ -3,8 +3,8 @@ module View (drawApp) where
 import Graphics.Gloss
 
 import GameData
-  (AppState (..), GameState (..), Hitbox (..), Level (..), LevelId (..), Player (..), Screen (..), SpriteAtlas
-  , StaticObj (..), Vec2 (..), levelName, playerHitbox)
+  (AppState (..), GameState (..), Goomba (..), GoombaState (..), Hammer (..), HammerBro (..), Hitbox (..), Level (..), LevelId (..), Player (..), Screen (..), SpriteAtlas
+  , StaticObj (..), Vec2 (..), broHitbox, goombaHitbox, hammerHitbox, levelName, playerHitbox)
   
 import Menu (menuButtons)
 
@@ -36,6 +36,9 @@ drawPlaying atlas gs =
   pictures
     [ color black (rectangleSolid 800 600)
     , pictures (map (drawStatic atlas (gsDebug gs)) (lvlStatics (gsLevel gs)))
+    , pictures (map (drawGoomba atlas (gsDebug gs)) (gsGoombas gs))
+    , pictures (map (drawBro atlas (gsDebug gs)) (gsBros gs))
+    , pictures (map (drawHammer atlas (gsDebug gs)) (gsHammers gs))
     , pictures (zipWith (drawPlayer atlas (gsDebug gs)) playerChars (gsPlayers gs))
     , cornerLabel (levelName (lvlId (gsLevel gs)))
     ]
@@ -59,6 +62,7 @@ playerChars = "ML"
 -- Sprite name: "MJR" (jump), "ML2" (walk frame), ...
 playerSprite :: Char -> Player -> String
 playerSprite ch p
+  | playerDead p = [ch, 'D']
   | onGround p = [ch, dir] ++ show frame
   | otherwise  = [ch, 'J', dir]
   where
@@ -76,6 +80,54 @@ drawPlayer atlas debug ch p =
   where
     c  = playerPos p
     hb = playerHitbox p
+
+goombaSprite :: Goomba -> String
+goombaSprite gb = case gState gb of
+  Walking -> "GW" ++ show ((floor (gPhase gb) :: Int) `mod` 3)
+  Flat _  -> "GF"
+  Dying   -> "GD"
+
+drawGoomba :: SpriteAtlas -> Bool -> Goomba -> Picture
+drawGoomba atlas debug gb =
+  translate (x c) (y c) $
+    if debug
+      then color silverWire $ rectangleWire (hbWidth hb) (hbHeight hb)
+      else case lookup (goombaSprite gb) atlas of
+             Just pic -> scale 2 2 pic
+             Nothing  -> color (makeColor 0.6 0.3 0.1 1.0) $ rectangleSolid (hbWidth hb) (hbHeight hb)
+  where
+    c  = gPos gb
+    hb = goombaHitbox gb
+
+-- Idle: HI0/HI1 swapping every 0.4 s. Throw pose: HT, which is 32x39 instead
+-- of 24x32, so shift it (+8, +7) to keep the feet in the same place.
+drawBro :: SpriteAtlas -> Bool -> HammerBro -> Picture
+drawBro atlas debug b
+  | debug     = translate (x c) (y c) $ color silverWire $ rectangleWire (hbWidth hb) (hbHeight hb)
+  | otherwise = translate (x c + dx) (y c + dy) $ case lookup (if broDead b then "HI0" else name) atlas of
+      Just pic -> scale 2 (2 * flipY) pic
+      Nothing  -> color (makeColor 0.2 0.7 0.3 1.0) $ rectangleSolid (hbWidth hb) (hbHeight hb)
+  where
+    c  = broPos b
+    hb = broHitbox b
+    (name, dx, dy) = case broWindup b of
+      Just _  -> ("HT", 8, 7)
+      Nothing -> ("HI" ++ show ((floor (broAnim b / 0.4) :: Int) `mod` 2), 0, 0)
+    -- dead: HI0 drawn upside down (no separate death sprite)
+    flipY = if broDead b then -1 else 1
+
+-- Spins through H0..H6 at 14 frames per second.
+drawHammer :: SpriteAtlas -> Bool -> Hammer -> Picture
+drawHammer atlas debug h =
+  translate (x c) (y c) $
+    if debug
+      then color silverWire $ rectangleWire (hbWidth hb) (hbHeight hb)
+      else case lookup ("H" ++ show ((floor (hamAnim h * 14) :: Int) `mod` 7)) atlas of
+             Just pic -> scale 2 2 pic
+             Nothing  -> color white $ rectangleSolid (hbWidth hb) (hbHeight hb)
+  where
+    c  = hamPos h
+    hb = hammerHitbox h
 
 drawButton :: (LevelId, Float) -> Picture
 drawButton (lid, cy) =

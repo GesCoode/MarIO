@@ -24,7 +24,7 @@ import GameData
   )
 import LevelLoad (loadLevel)
 import Menu (hitTest)
-import Physics (stepPlayer)
+import Physics (stepWorld)
 
 handleEvent :: Event -> AppState -> IO AppState
 handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
@@ -83,4 +83,4 @@ applyKey key pressed gs = case key of
       | otherwise       = pl
 
 stepApp :: Float -> AppState -> IO AppState
-stepApp dt app = pure $ mapPlaying app (stepPlayer dt)
+stepApp dt app = pure $ mapPlaying app (stepWorld dt)
