@@ -21,9 +21,25 @@ loadSprite name path = do
 
 loadSprites :: IO SpriteAtlas
 loadSprites = do
-  block <- loadSprite "block" "assets/block.bmp"
-  -- Add more sprites here
-  pure [block]
+  mapM (\(n, file) -> loadSprite n ("assets/" ++ file ++ ".bmp"))
+       ([(n, n) | n <- "block" : characterSprites ++ broSprites] ++ goombaSprites)
+
+-- Hammer Bro idle/throw poses and the 7 hammer spin frames.
+broSprites :: [String]
+broSprites = ["HI0", "HI1", "HT"] ++ ["H" ++ show i | i <- [0 .. 6 :: Int]]
+
+-- (sprite name, file name). GW1 doubles as the base pose.
+goombaSprites :: [(String, String)]
+goombaSprites =
+  [ ("GW0", "GW0"), ("GW1", "GW1 - Base"), ("GW2", "GW2"), ("GF", "GF"), ("GD", "GD") ]
+
+-- For M (Mario) and L (Luigi): death, jump left/right, walk left/right frames 0-2.
+characterSprites :: [String]
+characterSprites =
+  [ c : rest
+  | c <- "ML"
+  , rest <- ["D", "JL", "JR"] ++ [d : show i | d <- "LR", i <- [0 .. 2 :: Int]]
+  ]
 
 main :: IO ()
 main = do

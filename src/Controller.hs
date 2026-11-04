@@ -14,18 +14,17 @@ import Graphics.Gloss.Interface.IO.Game
 import GameData
   ( AppState (..)
   , GameState (..)
+  , InputHandler (..)
+  , Level (..)
   , Player (..)
+  , LevelId (..)
   , Screen (..)
-  , Vec2 (..)
   , initialApp
   , mkGameState
   )
 import LevelLoad (loadLevel)
 import Menu (hitTest)
-import Physics (stepPlayer)
-
-playerSpeed :: Float
-playerSpeed = 200
+import Physics (stepWorld)
 
 handleEvent :: Event -> AppState -> IO AppState
 handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
@@ -42,11 +41,13 @@ handleEvent (EventKey (SpecialKey KeyEsc) Down _ _) app =
     Playing _ -> pure (initialApp (sprites app))
     Menu      -> pure app
 
--- 'c' toggles wireframe view (no textures). 'd' is reserved for move-right (WASD).
+-- 'c' toggles wireframe view (no textures).
 handleEvent (EventKey (Char 'c') Down _ _) app =
   pure $ mapPlaying app $ \gs -> gs { gsDebug = not (gsDebug gs) }
-handleEvent (EventKey (Char 'C') Down _ _) app =
-  pure $ mapPlaying app $ \gs -> gs { gsDebug = not (gsDebug gs) }
+
+-- 'r' resets the sandbox (keeps debug setting).
+handleEvent (EventKey (Char 'r') Down _ _) app =
+  pure $ mapPlaying app resetSandbox
 
 handleEvent (EventKey key keyState _ _) app =
   case keyState of
@@ -59,28 +60,27 @@ mapPlaying :: AppState -> (GameState -> GameState) -> AppState
 mapPlaying app f = case screen app of
   Playing gs -> app { screen = Playing (f gs) }
   Menu       -> app
+  
+resetSandbox :: GameState -> GameState
+resetSandbox gs
+  | lvlId (gsLevel gs) == Sandbox = (mkGameState (gsLevel gs)) { gsDebug = gsDebug gs }
+  | otherwise                     = gs
 
+-- Player 0: WASD. Player 1: arrow keys.
 applyKey :: Key -> Bool -> GameState -> GameState
-applyKey key pressed gs =
-  let p = gsPlayer gs
-      Vec2 vx0 vy0 = playerVel p
-      (vx1, vy1) = case key of
-        SpecialKey KeyLeft  -> (axis pressed (-playerSpeed) vx0, vy0)
-        SpecialKey KeyRight -> (axis pressed   playerSpeed  vx0, vy0)
-        SpecialKey KeyUp    -> (vx0, axis pressed   playerSpeed  vy0)
-        SpecialKey KeyDown  -> (vx0, axis pressed (-playerSpeed) vy0)
-        Char 'a'            -> (axis pressed (-playerSpeed) vx0, vy0)
-        Char 'w'            -> (vx0, axis pressed   playerSpeed  vy0)
-        Char 's'            -> (vx0, axis pressed (-playerSpeed) vy0)
-        Char 'd'            -> (axis pressed (playerSpeed) vx0, vy0)
-        --Char 'r'            -> (reset)
-        _                   -> (vx0, vy0)
-  in gs { gsPlayer = p { playerVel = Vec2 vx1 vy1 } }
+applyKey key pressed gs = case key of
+  Char 'a'            -> onPlayer 0 (\i -> i { inLeft  = pressed })
+  Char 'd'            -> onPlayer 0 (\i -> i { inRight = pressed })
+  Char 'w'            -> onPlayer 0 (\i -> i { inJump  = pressed })
+  SpecialKey KeyLeft  -> onPlayer 1 (\i -> i { inLeft  = pressed })
+  SpecialKey KeyRight -> onPlayer 1 (\i -> i { inRight = pressed })
+  SpecialKey KeyUp    -> onPlayer 1 (\i -> i { inJump  = pressed })
+  _                   -> gs
   where
-    axis True  speed _current = speed
-    axis False speed current
-      | abs (current - speed) < 1e-3 = 0
-      | otherwise                    = current
+    onPlayer n f = gs { gsPlayers = zipWith (upd n f) [0 ..] (gsPlayers gs) }
+    upd n f i pl
+      | i == (n :: Int) = pl { playerIn = f (playerIn pl) }
+      | otherwise       = pl
 
 stepApp :: Float -> AppState -> IO AppState
-stepApp dt app = pure $ mapPlaying app (stepPlayer dt)
+stepApp dt app = pure $ mapPlaying app (stepWorld dt)
