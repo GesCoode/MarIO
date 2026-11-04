@@ -73,11 +73,9 @@ data Level = Level {
 
 -- | Controls for one player
 data InputHandler = InputHandler {
-    lvlId      :: LevelId,
-    lvlStatics :: [StaticObj],
-    lvlPlayers :: [PlayerStart],
-    lvlGoombas :: [GoombaStart],
-    lvlBros    :: [BroStart]}
+    inLeft :: Bool,
+    inRight :: Bool,
+    inJump :: Bool
     deriving (Eq)
    
 noInput :: InputHandler
@@ -175,6 +173,8 @@ data GameState = GameState {
     gsGoombas      :: [Goomba],
     gsBros         :: [HammerBro],
     gsHammers      :: [Hammer],
+    gsScore        :: Int,
+    gsPaused       :: Bool,
     gsRng          :: Int,        -- seed for random death arcs
     gsDebug        :: Bool}
 
@@ -198,29 +198,29 @@ spawnPlayer ps = defaultPlayer {
     playerSpawn = psCenter ps}
 
 mkGameState :: PlayerSelect -> Level ->  Either String GameState
-mkGameState select lvl = GameState {
-    gsLevel        = lvl,
-    gsPlayerSelect = select,
-    gsPlayers      = take (selectPlayer select) (startpos ++ fallback),
-    gsGoombas      = map spawnGoomba (lvlGoombas lvl),
-    gsBros         = map spawnBro (lvlBros lvl),
-    gsHammers      = [],
-    gsScore        = 0,
-    gsPaused       = False,
-    gsRng          = 12345,
-    gsDebug        = True}
-    where
-        startpos = map spawnPlayer (lvlPlayers level)
-        -- if the level defines fewer than 2 spawns, place extra players next to the first
-        base = case starts of
-            (p:_) -> p
-            []    -> defaultPlayer
-        fallback = 
-            [ base { playerPos = pos, playerSpawn = pos }
-            | i <- [length starts ..] :: [Int]
-            , let pos = Vec2 
-                (x (playerPos base) + 48 * fromIntegral i) 
-                (y (playerPos base)) ]
+mkGameState select lvl
+    | null startpos = Left "Level has no starting positions." 
+    | otherwise = Right GameState {
+        gsLevel        = lvl,
+        gsPlayerSelect = select,
+        gsPlayers      = take (selectPlayer select) (startpos ++ fallback),
+        gsGoombas      = map spawnGoomba (lvlGoombas lvl),
+        gsBros         = map spawnBro (lvlBros lvl),
+        gsHammers      = [],
+        gsScore        = 0,
+        gsPaused       = False,
+        gsRng          = 12345,
+        gsDebug        = True}
+        where
+            startpos = map spawnPlayer (lvlPlayers lvl)
+            -- if the level defines fewer than 2 spawns, place extra players next to the first
+            base = head startpos 
+            fallback = 
+                [ base { playerPos = pos, playerSpawn = pos }
+                | i <- [length startpos .. selectPlayer select - 1] :: [Int]
+                , let pos = Vec2 
+                    (x (playerPos base) + 48 * fromIntegral i) 
+                    (y (playerPos base)) ]
 
 staticHitbox :: StaticObj -> Hitbox
 staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object)

@@ -1,86 +1,104 @@
 module Controller
-  ( handleEvent
-  , stepApp
-  ) where
+    ( handleEvent
+    , stepApp
+    ) where
 
+import Control.Exception (IOException, try)
+import Data.Char (toLower)
+import System.IO (hPutStrLn, stderr)
 import Graphics.Gloss.Interface.IO.Game
-  ( Event (..)
-  , Key (..)
-  , KeyState (..)
-  , MouseButton (..)
-  , SpecialKey (..)
-  )
+    ( Event (..)
+    , Key (..)
+    , KeyState (..)
+    , MouseButton (..)
+    , SpecialKey (..))
 
 import GameData
-  ( AppState (..)
-  , GameState (..)
-  , InputHandler (..)
-  , Level (..)
-  , Player (..)
-  , LevelId (..)
-  , Screen (..)
-  , initialApp
-  , mkGameState
-  )
+    ( AppState (..)
+    , GameState (..)
+    , InputHandler (..)
+    , Level (..)
+    , Player (..)
+    , LevelId (..)
+    , Screen (..)
+    , initialApp
+    , mkGameState
+    )
 import LevelLoad (loadLevel)
 import Menu (hitTest)
 import Physics (stepWorld)
 
 handleEvent :: Event -> AppState -> IO AppState
 handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
-  case screen app of
-    Menu -> case hitTest mouse of
-      Nothing  -> pure app
-      Just lid -> do
-        lvl <- loadLevel lid
-        pure app { screen = Playing (mkGameState lvl) }
-    Playing _ -> pure app
-
+    case screen app of
+        Menu -> case hitTestPlayers mouse of
+            Just select -> pure app { playerSelect = select }
+            Nothing -> case hitTest mouse of 
+                Nothing  -> pure app
+                Just lvl -> loadLvl lvl app
+        Playing _ -> pure app
+        
 handleEvent (EventKey (SpecialKey KeyEsc) Down _ _) app =
-  case screen app of
-    Playing _ -> pure (initialApp (sprites app))
-    Menu      -> pure app
+    pure app { screen = Menu }
 
--- 'c' toggles wireframe view (no textures).
-handleEvent (EventKey (Char 'c') Down _ _) app =
-  pure $ mapPlaying app $ \gs -> gs { gsDebug = not (gsDebug gs) }
-
--- 'r' resets the sandbox (keeps debug setting).
-handleEvent (EventKey (Char 'r') Down _ _) app =
-  pure $ mapPlaying app resetSandbox
-
+-- | Pause, toggel or restart
+handleEvent (EventKey (Char tkn) Down _ _) app
+    | toLower tkn == 'p' = 
+        pure (adjustGs app (\gs -> gs { gsPaused = not (gsPaused gs) }))
+    | toLower tkn == 'c' = 
+        pure (adjustGs app (\gs -> gs { gsDebug = not (gsDebug gs) }))
+    | toLower tkn == 'r' = 
+        pure (adjustGs app resetSandbox)
+        
+-- | Process pressing and letting go of movement keys 
 handleEvent (EventKey key keyState _ _) app =
-  case keyState of
-    Down -> pure $ mapPlaying app (applyKey key True)
-    Up   -> pure $ mapPlaying app (applyKey key False)
-
+    pure (adjustGs app (processKey key (state == down)))
 handleEvent _ app = pure app
 
+-- | Load level and create chosen players
+--   Loading error: menu stays visible --> error goes to stderr
+loadLevel :: LevelId -> AppState -> IO AppState
+loadLevel lvl app = do
+    res <- try (loadLevel lvl) :: IO (Either IOException Level)
+    case res of 
+        Left err -> do
+            hPutStrLn stderr ("Level couldn't be loaded: " ++ show err)
+            pure app
+        Right loaded -> 
+            case mkGameState (playerSelect app) loaded of 
+                Left msg -> do
+                    hPutStrLn stderr msg
+                    pure app
+                Right gs -> pure app { screen = Playing gs }
+
+-- | Adjust pure function only if game is active     
 mapPlaying :: AppState -> (GameState -> GameState) -> AppState
 mapPlaying app f = case screen app of
-  Playing gs -> app { screen = Playing (f gs) }
-  Menu       -> app
-  
+    Playing gs -> app { screen = Playing (f gs) }
+    Menu       -> app
+
 resetSandbox :: GameState -> GameState
 resetSandbox gs
-  | lvlId (gsLevel gs) == Sandbox = (mkGameState (gsLevel gs)) { gsDebug = gsDebug gs }
-  | otherwise                     = gs
+  | lvlId (gsLevel gs) /= Sandbox = gs
+  | otherwise = case mkGameState (gsPlayerSelect gs) (gsLevel gs) of
+      Left _ -> gs
+      Right new -> new { gsDebug = gsDebug gs }
 
 -- Player 0: WASD. Player 1: arrow keys.
 applyKey :: Key -> Bool -> GameState -> GameState
 applyKey key pressed gs = case key of
-  Char 'a'            -> onPlayer 0 (\i -> i { inLeft  = pressed })
-  Char 'd'            -> onPlayer 0 (\i -> i { inRight = pressed })
-  Char 'w'            -> onPlayer 0 (\i -> i { inJump  = pressed })
-  SpecialKey KeyLeft  -> onPlayer 1 (\i -> i { inLeft  = pressed })
-  SpecialKey KeyRight -> onPlayer 1 (\i -> i { inRight = pressed })
-  SpecialKey KeyUp    -> onPlayer 1 (\i -> i { inJump  = pressed })
-  _                   -> gs
-  where
-    onPlayer n f = gs { gsPlayers = zipWith (upd n f) [0 ..] (gsPlayers gs) }
-    upd n f i pl
-      | i == (n :: Int) = pl { playerIn = f (playerIn pl) }
-      | otherwise       = pl
+    Char 'a'            -> onPlayer 0 (\i -> i { inLeft  = pressed })
+    Char 'd'            -> onPlayer 0 (\i -> i { inRight = pressed })
+    Char 'w'            -> onPlayer 0 (\i -> i { inJump  = pressed })
+    SpecialKey KeyLeft  -> onPlayer 1 (\i -> i { inLeft  = pressed })
+    SpecialKey KeyRight -> onPlayer 1 (\i -> i { inRight = pressed })
+    SpecialKey KeyUp    -> onPlayer 1 (\i -> i { inJump  = pressed })
+    _                   -> gs
+    where
+        onPlayer n f = gs { gsPlayers = zipWith (upd n f) [0 ..] (gsPlayers gs) }
+        upd n f i pl
+            | i == (n :: Int) = pl { playerIn = f (playerIn pl) }
+            | otherwise       = pl
 
 stepApp :: Float -> AppState -> IO AppState
 stepApp dt app = pure $ mapPlaying app (stepWorld dt)
