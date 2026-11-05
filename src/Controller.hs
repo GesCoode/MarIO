@@ -1,29 +1,29 @@
-module Controller
-    ( handleEvent
-    , stepApp
-    ) where
+module Controller ( 
+    handleEvent,
+    stepApp ) 
+    where
 
 import Control.Exception (IOException, try)
 import Data.Char (toLower)
 import System.IO (hPutStrLn, stderr)
-import Graphics.Gloss.Interface.IO.Game
-    ( Event (..)
-    , Key (..)
-    , KeyState (..)
-    , MouseButton (..)
-    , SpecialKey (..))
+import Graphics.Gloss.Interface.IO.Game (
+    Event (..),
+    Key (..),
+    KeyState (..),
+    MouseButton (..),
+    SpecialKey (..))
 
-import GameData
-    ( AppState (..)
-    , GameState (..)
-    , InputHandler (..)
-    , Level (..)
-    , Player (..)
-    , LevelId (..)
-    , Screen (..)
-    , initialApp
-    , mkGameState
-    )
+import GameData (
+    AppState (..),
+    GameState (..),
+    InputHandler (..),
+    Level (..),
+    Player (..),
+    LevelId (..),
+    Screen (..),
+    initialApp,
+    mkGameState)
+    
 import LevelLoad (loadLevel)
 import Menu (hitTest, hitTestPlayers)
 import Physics (stepWorld)
