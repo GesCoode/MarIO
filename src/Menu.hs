@@ -21,7 +21,7 @@ menuW, menuH :: Float
 menuW = 360
 menuH = 45
 
-menuButtons :: [(LevelId, Float)]
+menuButtons :: [(MenuSelect, Float)]
 menuButtons = [
     (SelectLevel Sandbox, 185),
     (SelectLevel Level1, 125),

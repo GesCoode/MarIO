@@ -1,11 +1,13 @@
 module Controller ( 
     handleEvent,
-    stepApp ) 
+    stepApp,
+    activateSwitch) 
     where
 
 import Control.Exception (IOException, try)
 import Data.Char (toLower)
-import System.IO (hPutStrLn, stderr)
+import Data.List (sortBy)
+import Data.Ord (comparing)
 import Graphics.Gloss.Interface.IO.Game (
     Event (..),
     Key (..),
@@ -15,18 +17,23 @@ import Graphics.Gloss.Interface.IO.Game (
 
 import GameData (
     AppState (..),
+    GameMode(..),
     GameState (..),
+    GameStatus (..),
+    Highscore (..),
     InputHandler (..),
     Level (..),
-    Player (..),
     LevelId (..),
+    Player (..),
     Screen (..),
-    initialApp,
-    mkGameState)
+    SwitchType (..),
+    mkGameStateMode (..))
     
 import LevelLoad (loadLevel)
-import Menu (hitTest, hitTestPlayers)
-import Physics (stepWorld)
+import Menu (MenuSelect (..), hitTest, hitTestPlayers)
+-- import Persistence (saveScores, saveProgress)
+import Physics (stepWorld, findSwitch)
+import Procedural (createVert, nextSeed, checkAvail)
 
 handleEvent :: Event -> AppState -> IO AppState
 handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =

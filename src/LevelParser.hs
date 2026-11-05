@@ -58,14 +58,14 @@ optionalList item s0 =
         rest       -> Right ([], rest)
 
 -- | Read position: [x, y] 
-readPos :: Parser Vector2
+readPos :: Parser Vec2
 readPos input = do
     ((), s1) <- expect '[' input
     (cx, s2) <- number (skipSpace s1)
     ((), s3) <- expect ',' (skipSpace s2)
     (cy, s4) <- number (skipSpace s3)
     ((), s5) <- expect ']' (skipSpace s4)
-    Right (Vector2 cx cy, s5)
+    Right (Vec2 cx cy, s5)
     
 -- | Read Hammer Bro-startingposition: [x, y].
 broStart :: Parser BroStart
