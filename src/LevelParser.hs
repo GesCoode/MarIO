@@ -1,84 +1,144 @@
 module LevelParser (parseLevelFile) where
 
-import GameData ( 
-    BroStart (..),
-    GoombaStart (..),
-    LevelFile (..),
-    PlayerStart (..),
-    StaticObj (..),
-    Vec2 (..))
-import Text.ParserCombinators.ReadP ( 
-    ReadP,
-    between,
-    char,
-    eof,
-    option,
-    pfail,
-    readP_to_S,
-    readS_to_P,
-    sepBy,
-    skipSpaces)
-    
--- | Read level (obj, players, enemies) 
-parseLevelFile :: String -> Either String LevelFile 
-parseLevelFile content = 
-    case [lvl | (lvl, "") <- readP_to_S parse content] of
-        [] -> Left "Invalid file: check please."
-        (lvl : _)
-            | all validObj (lfStatics lvl) -> Right lvl
-            | otherwise -> Left "Object has invalid dimensions or name."
-    where 
-            parse = skipSpaces *> readLevel <* skipSpaces <* eof
+import Data.Char (isDigit, isSpace)
 
--- | Read a value between [ ] 
-lst :: ReadP a -> ReadP [a]
-lst el = between (sym '[') (sym ']')
-    (sepBy el (sym ','))
+import GameData
+  ( BroStart (..)
+  , GoombaStart (..)
+  , LevelFile (..)
+  , PlayerStart (..)
+  , StaticObj (..)
+  , Vec2 (Vec2)
+  )
 
--- | Read a symbol + skip spaces
-sym :: Char -> ReadP Char
-sym tkn = skipSpaces *> char tkn <* skipSpaces
+type Parser a = String -> Either String (a, String)
 
--- | Numbers 
-num :: ReadP Float
-num = do 
-    val <- skipSpaces *> readS_to_P reads <* skipSpaces
-    if isNaN val || isInfinite val then pfail else pure val 
+parseLevelFile :: String -> Either String LevelFile
+parseLevelFile input = do
+  (file, rest) <- levelFile (skipSpace input)
+  case skipSpace rest of
+    ""       -> Right file
+    leftover -> Left ("Unexpected trailing input: " ++ take 40 leftover)
 
-text :: ReadP String
-text = skipSpaces *> readS_to_P reads <* skipSpaces
+levelFile :: Parser LevelFile
+levelFile s0 = do
+  ((), s1) <- expect '[' s0
+  (statics, s2) <- listOf staticObj (skipSpace s1)
+  ((), s3) <- expect ',' (skipSpace s2)
+  (players, s4) <- listOf playerStart (skipSpace s3)
+  -- optional third list: goombas
+  (goombas, s5) <- optionalList goombaStart s4
+  -- optional fourth list: hammer bros
+  (bros, s6) <- optionalList broStart s5
+  ((), s7) <- expect ']' (skipSpace s6)
+  Right (LevelFile statics players goombas bros, s7)
 
-vec :: ReadP Vec2
-vec = Vec2 <$> num <* sym ',' <*> num
+-- | @, [ ... ]@ if present, otherwise an empty list.
+optionalList :: Parser a -> Parser [a]
+optionalList item s0 = case skipSpace s0 of
+  ',' : s -> listOf item (skipSpace s)
+  s       -> Right ([], s)
 
-readLevel :: ReadP LevelFile
-readLevel = between (sym '[') (sym ']') $
-    LevelFile <$> lst readObj
-    <* sym ',' <*> lst readPlayer
-    <*> option [] (sym ',' *> lst readGoomba)
-    <*> option [] (sym ',' *> lst readBro)
-    
-readObj :: ReadP StaticObj
-readObj = between (sym '[') (sym ']') $
-    StaticObj <$> vec <* sym ','
-    <*> num <* sym ','
-    <*> num <* sym ','
-    <*> text
+-- | Hammer Bro: @[cx, cy]@.
+broStart :: Parser BroStart
+broStart s0 = do
+  ((), s1) <- expect '[' s0
+  (cx, s2) <- number (skipSpace s1)
+  ((), s3) <- expect ',' (skipSpace s2)
+  (cy, s4) <- number (skipSpace s3)
+  ((), s5) <- expect ']' (skipSpace s4)
+  Right (BroStart (Vec2 cx cy), s5)
 
-readPlayer :: ReadP PlayerStart
-readPlayer = between (sym '[') (sym ']') $
-    PlayerStart <$> vec <* sym ',' <*> vec
+-- | Goomba: @[cx, cy, dir]@ with dir -1 (left) or 1 (right).
+goombaStart :: Parser GoombaStart
+goombaStart s0 = do
+  ((), s1) <- expect '[' s0
+  (cx, s2) <- number (skipSpace s1)
+  ((), s3) <- expect ',' (skipSpace s2)
+  (cy, s4) <- number (skipSpace s3)
+  ((), s5) <- expect ',' (skipSpace s4)
+  (d, s6) <- number (skipSpace s5)
+  ((), s7) <- expect ']' (skipSpace s6)
+  Right (GoombaStart (Vec2 cx cy) d, s7)
 
-readGoomba :: ReadP GoombaStart
-readGoomba = between (sym '[') (sym ']') $
-    GoombaStart <$> vec <* sym ',' <*> num
+staticObj :: Parser StaticObj
+staticObj s0 = do
+  ((), s1) <- expect '[' s0
+  (cx, s2) <- number (skipSpace s1)
+  ((), s3) <- expect ',' (skipSpace s2)
+  (cy, s4) <- number (skipSpace s3)
+  ((), s5) <- expect ',' (skipSpace s4)
+  (w, s6) <- number (skipSpace s5)
+  ((), s7) <- expect ',' (skipSpace s6)
+  (h, s8) <- number (skipSpace s7)
+  ((), s9) <- expect ',' (skipSpace s8)
+  (sprite, s10) <- stringLit (skipSpace s9)
+  ((), s11) <- expect ']' (skipSpace s10)
+  Right (StaticObj (Vec2 cx cy) w h sprite, s11)
 
-readBro :: ReadP BroStart
-readBro = between (sym '[') (sym ']') $
-    BroStart <$> vec
+playerStart :: Parser PlayerStart
+playerStart s0 = do
+  ((), s1) <- expect '[' s0
+  (cx, s2) <- number (skipSpace s1)
+  ((), s3) <- expect ',' (skipSpace s2)
+  (cy, s4) <- number (skipSpace s3)
+  ((), s5) <- expect ',' (skipSpace s4)
+  (vx, s6) <- number (skipSpace s5)
+  ((), s7) <- expect ',' (skipSpace s6)
+  (vy, s8) <- number (skipSpace s7)
+  ((), s9) <- expect ']' (skipSpace s8)
+  Right (PlayerStart (Vec2 cx cy) (Vec2 vx vy), s9)
 
-validObj :: StaticObj -> Bool
-validObj obj = 
-    soWidth obj > 0 &&
-    soHeight obj > 0 &&
-    not (null (soSprite obj))
+-- | Parse @[ item, item, ... ]@.
+listOf :: Parser a -> Parser [a]
+listOf item s0 = do
+  ((), s1) <- expect '[' s0
+  go [] (skipSpace s1)
+  where
+    go acc s =
+      case skipSpace s of
+        ']' : rest -> Right (reverse acc, rest)
+        s' -> do
+          (itemVal, s2) <- item s'
+          case skipSpace s2 of
+            ',' : s3 -> go (itemVal : acc) (skipSpace s3)
+            ']' : s3 -> Right (reverse (itemVal : acc), s3)
+            _        -> Left "Expected ',' or ']' in array"
+
+number :: Parser Float
+number s0 =
+  case s0 of
+    '-' : s1 -> do
+      (n, rest) <- unsigned s1
+      Right (-n, rest)
+    _ -> unsigned s0
+  where
+    unsigned s =
+      case span isDigit s of
+        ("", _) -> Left "Expected number"
+        (intPart, rest) ->
+          case rest of
+            '.' : frac ->
+              case span isDigit frac of
+                ("", _) -> Left "Expected digits after decimal point"
+                (fracPart, rest') ->
+                  Right (read (intPart ++ '.' : fracPart), rest')
+            _ -> Right (read intPart, rest)
+
+-- | Simple string: @"..."@ with no escape sequences.
+stringLit :: Parser String
+stringLit ('"' : s) = go "" s
+  where
+    go _ ""           = Left "Unterminated string"
+    go acc ('"' : s') = Right (reverse acc, s')
+    go acc (c : s')   = go (c : acc) s'
+stringLit _ = Left "Expected string"
+
+expect :: Char -> Parser ()
+expect c (ch : xs)
+  | ch == c   = Right ((), xs)
+  | otherwise = Left ("Expected '" ++ [c] ++ "', got '" ++ [ch] ++ "'")
+expect c []   = Left ("Expected '" ++ [c] ++ "', got end of input")
+
+skipSpace :: String -> String
+skipSpace = dropWhile isSpace
