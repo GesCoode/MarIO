@@ -199,11 +199,11 @@ spawnPlayer ps = defaultPlayer {
 
 mkGameState :: PlayerSelect -> Level ->  Either String GameState
 mkGameState select lvl
-    | null startpos = Left "Level has no starting positions." 
+    | length startpos < selectPlayer select = Left "Level has too few starting positions." 
     | otherwise = Right GameState {
         gsLevel        = lvl,
         gsPlayerSelect = select,
-        gsPlayers      = take (selectPlayer select) (startpos ++ fallback),
+        gsPlayers      = take (selectPlayer select) (startpos),
         gsGoombas      = map spawnGoomba (lvlGoombas lvl),
         gsBros         = map spawnBro (lvlBros lvl),
         gsHammers      = [],
@@ -213,13 +213,7 @@ mkGameState select lvl
         gsDebug        = True}
         where
             startpos = map spawnPlayer (lvlPlayers lvl)
-            -- if the level defines fewer than 2 spawns, place extra players next to the first
-            base = head startpos 
-            fallback = 
-                [ base { playerPos = pos, playerSpawn = pos }
-                | i <- [length startpos .. selectPlayer select - 1] :: [Int]
-                , let pos = Vec2 (x (playerPos base) + 48 * fromIntegral i) (y (playerPos base)) ]
-
+            
 staticHitbox :: StaticObj -> Hitbox
 staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object)
 
