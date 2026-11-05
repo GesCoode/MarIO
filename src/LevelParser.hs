@@ -11,7 +11,8 @@ import GameData (
     StaticObj (..),
     Vec2 (Vec2),
     Switch (..),
-    SwitchType (..))
+    SwitchType (..),
+    LevelId (..))
 
 -- | Parser returns a value and the not-yet processed input. Errors are shown using Left. 
 type Parser a = String -> Either String (a, String)
@@ -190,6 +191,7 @@ skipSpace :: String -> String
 skipSpace = dropWhile isSpace
 
 -- | Switch: [x, y, "vertical"] or [x, y, "horizontal"]
+--   "end" is meant as the end of a random level
 readSwitch :: Parser Switch
 readSwitch input = do
     ((), s1) <- expect '[' input
@@ -199,7 +201,11 @@ readSwitch input = do
     ((), s5) <- expect ',' (skipSpace s4)
     (goal, s6) <- stringLit (skipSpace s5)
     ((), s7) <- expect ',' (skipSpace s6)
+    let createSwitch spot = Right (Switch (Vec2 cx cy) spot, s7)
     case goal of 
-        "vertical" -> Right (Switch (Vec2 cx cy) ToVertical, s7)
-        "horizontal" -> Right (Switch (Vec2 cx cy) ToHorizontal)
-        _ -> Left "Unknown switch type: use 'vertical' or 'horizontal'."
+        "vertical" -> createSwitch ToVertical
+        "level1" -> createSwitch (ToHorizontal Level1)
+        "level2" -> createSwitch (ToHorizontal Level2)
+        "level3" -> createSwitch (ToHorizontal Level3)
+        "end" -> createSwitch ToEnd
+        _ -> Left ("Unknown switch type: " ++ goal ".")
