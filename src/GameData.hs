@@ -23,7 +23,6 @@ data StaticObj = StaticObj {
     soSprite :: String}
     deriving (Eq)
 
--- Include direction
 data PlayerStart = PlayerStart {
     psCenter :: Vec2, 
     psVel :: Vec2}
@@ -40,21 +39,32 @@ newtype BroStart = BroStart {
     bsCenter :: Vec2 }
     deriving (Eq)
 
-data LevelId = Sandbox | Level1 | Level2 | Level3
-  deriving (Eq)
+data LevelId = Sandbox | Level1 | Level2 | Level3 | RandomVertical
+  deriving (Eq, Ord, Enum, Bounded, Show, Read)
   
 levelName :: LevelId -> String
 levelName Sandbox = "Sandbox"
 levelName Level1  = "Level 1"
 levelName Level2  = "Level 2"
 levelName Level3  = "Level 3"
+levelName RandomVertical = "Random Vertical"
 
-levelPath :: LevelId -> FilePath
-levelPath Sandbox = "Levels/sandbox.json"
-levelPath Level1  = "Levels/level1.json"
-levelPath Level2  = "Levels/level2.json"
-levelPath Level3  = "Levels/level3.json"
+levelPath :: LevelId -> Maybe FilePath
+levelPath Sandbox = Just "Levels/sandbox.json"
+levelPath Level1  = Just "Levels/level1.json"
+levelPath Level2  = Just "Levels/level2.json"
+levelPath Level3  = Just "Levels/level3.json"
+levelPath RandomVertical = Nothing
 
+-- | Switches: [x, y, "vertical"/"continue"]
+data SwitchType = ToVertical | ToContinue
+    deriving (Eq)
+
+data Switch = Switch {
+    switchPos :: Vec2
+    switchType :: SwitchType}
+    deriving (Eq)
+    
 -- | Parsed level payload (level id comes from which file was loaded).
 data LevelFile = LevelFile {
     lfStatics :: [StaticObj], 
@@ -62,20 +72,22 @@ data LevelFile = LevelFile {
     lfGoombas :: [GoombaStart],
     lfBros    :: [BroStart],
     lfGoals   :: [Vec2],
-    lfBosses  :: [Vec2]}
+    lfBosses  :: [Vec2],
+    lfSwitches  :: [Switch]}
     deriving (Eq)
 
 data Level = Level { 
-    lvlId :: LevelId, 
-    lvlStatics :: [StaticObj], 
-    lvlPlayers :: [PlayerStart],
-    lvlGoombas :: [GoombaStart],
-    lvlBros    :: [BroStart],
-    lvlGoals   :: [Vec2],
-    lvlBosses  :: [Vec2]}
+    lvlId       :: LevelId, 
+    lvlStatics  :: [StaticObj], 
+    lvlPlayers  :: [PlayerStart],
+    lvlGoombas  :: [GoombaStart],
+    lvlBros     :: [BroStart],
+    lvlGoals    :: [Vec2],
+    lvlBosses   :: [Vec2],
+    lvlSwitches :: [Switch]}
     deriving (Eq)
 
--- | Controls for one player
+-- Controls for player
 data InputHandler = InputHandler {
     inLeft :: Bool,
     inRight :: Bool,
@@ -110,11 +122,9 @@ data Player = Player {
     facingRight :: Bool,    -- last walking direction
     walkPhase   :: Float}   -- walk cycle progress; frame = floor walkPhase `mod` 3
     deriving (Eq)
-    
-data GoombaState
-    = Walking
-    | Flat Float   -- squashed; seconds left before it flies off
-    | Dying        -- flying off screen, no collisions
+
+-- (1) Walking, (2) Squashed: seconds left before it flies off, (3) flying off screen, no collisions
+data GoombaState = Walking | Flat Float | Dying
     deriving (Eq)
 
 data Goomba = Goomba {
@@ -188,6 +198,7 @@ data GameState = GameState {
     gsLevel        :: Level, 
     gsPlayerSelect :: PlayerSelect,
     gsMode         :: GameMode,
+    gsNextLevel    :: Maybe LevelId,
     gsStatus       :: GameStatus,
     gsPlayers      :: [Player],   -- index 0 = WASD, index 1 = arrows
     gsGoombas      :: [Goomba],
@@ -195,6 +206,7 @@ data GameState = GameState {
     gsHammers      :: [Hammer],
     gsBoss         :: Maybe Boss,
     gsScore        :: Int,
+    gsStartScore   :: Int,
     gsPaused       :: Bool,
     gsRng          :: Int,        -- seed for random death arcs
     gsDebug        :: Bool}
@@ -242,25 +254,27 @@ spawnPlayer ps = defaultPlayer {
 mkGameState :: PlayerSelect -> Level ->  Either String GameState
 mkGameState select = mkGameStateMode select LevelSelect
 
-mkGameState :: PlayerSelect -> Level ->  Either String GameState
-mkGameState select mode lvl
-    | length startpos < selectPlayer select = Left "Level has too few starting positions." 
-    | otherwise = Right GameState {
+mkGameStateMode :: PlayerSelect -> GameMode -> Level ->  Either String GameState
+mkGameStateMode select mode lvl
+    | length (lvlPlayers lvl) < selectPlayer select = Left "Level has too few starting positions." 
+    | otherwise = Right (GameState {
         gsLevel        = lvl,
         gsPlayerSelect = select,
         gsMode         = mode,
+        gsNextLevel    = Nothing
         gsStatus       = InProgress,
-        gsPlayers      = take (selectPlayer select) (map spawnPlayer (lvlPlayers level)),
+        gsPlayers      = take (selectPlayer select) (map spawnPlayer (lvlPlayers lvl)),
         gsGoombas      = map spawnGoomba (lvlGoombas lvl),
         gsBros         = map spawnBro (lvlBros lvl),
         gsHammers      = [],
         gsBoss         = case lvlBosses lvl of
             [] -> Nothing
-            pos : _ -> Just (spawnBoss pos)
+            pos : _ -> Just (spawnBoss pos),
         gsScore        = 0,
+        gsStartScore   = 0,
         gsPaused       = False,
         gsRng          = 12345,
-        gsDebug        = True}
+        gsDebug        = True})
 
 staticHitbox :: StaticObj -> Hitbox
 staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object)

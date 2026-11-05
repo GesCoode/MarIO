@@ -1,4 +1,5 @@
 module Menu ( 
+    MenuSelect (..),
     menuButtons,
     menuW,
     menuH,
@@ -13,30 +14,35 @@ module Menu (
 import Data.Maybe (listToMaybe)
 import GameData (LevelId (..), PlayerSelect (..))
 
+data MenuSelect = SelectLevel LevelId | StartCampaign | StartRandom
+    deriving (Eq)
+    
 menuW, menuH :: Float
 menuW = 360
-menuH = 50
+menuH = 45
 
 menuButtons :: [(LevelId, Float)]
-menuButtons = 
-    [ (Sandbox,  150)
-    , (Level1,    50)
-    , (Level2,   -50)
-    , (Level3,  -150)]
+menuButtons = [
+    (SelectLevel Sandbox, 185),
+    (SelectLevel Level1, 125),
+    (SelectLevel Level2, 65),
+    (SelectLevel Level3, 5),
+    (StartCampaign, -55),
+    (StartRandom, -115)]
 
 playerBtnW, playerBtnH, playerBtnY :: Float
 playerBtnW = 185
 playerBtnH = 42
-playerBtnY = -220
+playerBtnY = -225
 
 playerBtn :: [(PlayerSelect, Float)]
 playerBtn = [(SinglePlayer, -105), (TwoPlayer, 105)]
 
 --Remove hardcoded variables!!
-hitTest :: (Float, Float) -> Maybe LevelId
+hitTest :: (Float, Float) -> Maybe MenuSelect
 hitTest (mx, my) = listToMaybe
-    [ lvl 
-    | (lvl, midY) <- menuButtons
+    [ choice 
+    | (choice, midY) <- menuButtons
     , abs mx <= menuW / 2
     , abs (my - midY) <= menuH / 2 ]
     
