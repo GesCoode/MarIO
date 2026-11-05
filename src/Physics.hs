@@ -1,31 +1,30 @@
-module Physics
-    ( stepWorld
-    ) where
+module Physics ( 
+    stepWorld)
+    where
 
 import Data.List (mapAccumL, minimumBy)
 import Data.Ord (comparing)
 
-import GameData
-  ( GameState (..)
-  , Goomba (..)
-  , Hammer (..)
-  , HammerBro (..)
-  , GoombaState (..)
-  , Hitbox (..)
-  , InputHandler (..)
-  , Level (..)
-  , Player (..)
-  , Vec2 (..)
-  , overlaps
-  , playerHitbox
-  , staticHitbox
-  , goombaHitbox
-  , broHitbox
-  , hammerHitbox
-  , goombaH
-  , goombaW
-  , defaultPlayer
-  )
+import GameData (
+    GameState (..),
+    Goomba (..),
+    Hammer (..),
+    HammerBro (..),
+    GoombaState (..),
+    Hitbox (..),
+    InputHandler (..),
+    Level (..),
+    Player (..),
+    Vec2 (..),
+    overlaps,
+    playerHitbox,
+    staticHitbox,
+    goombaHitbox,
+    broHitbox,
+    hammerHitbox,
+    goombaH,
+    goombaW,
+    defaultPlayer)
   
 -- | One frame: players, goombas, then player/goomba contact.
 stepWorld :: Float -> GameState -> GameState
@@ -60,6 +59,7 @@ stepPlayer dt solids pl0
     | playerDead pl0 = fall pl0
     | otherwise      = respawnIfFallen (updateAnim dt (moveY (moveX (updateVel dt (playerIn pl0) pl0))))
     where
+        move = dy (dx (updateVel dt (playerIn pl0) pl0))
         hits pl = any (overlaps (playerHitbox pl)) solids
         -- dead: just gravity, no collisions, until off screen
         fall pl =
@@ -71,7 +71,7 @@ stepPlayer dt solids pl0
                     playerVel = Vec2 vx vy' }
             in respawnIfFallen pl1
 
-    -- Fallen spplayer falls without collisions out of frame
+    -- Fallen player falls without collisions out of frame
         respawnIfFallen pl
             | y (playerPos pl) < killY = defaultPlayer { 
                                              playerPos = playerSpawn pl,
@@ -226,8 +226,8 @@ hitGoomba (p : ps) gb
 -- Falling, with feet in the upper half of the enemy (whose center is given).
 isStomp :: Player -> Vec2 -> Bool
 isStomp p enemyCenter = y (playerVel p) < 0 && feet > y enemyCenter
-  where 
-      feet = y (playerPos p) - playerH p / 2
+    where 
+        feet = y (playerPos p) - playerH p / 2
 
 bounce :: Player -> Player
 bounce pl = pl { 
@@ -242,8 +242,8 @@ killPlayer pl = pl {
 
 hurtBy :: [Hitbox] -> Player -> Player
 hurtBy dangers p
-  | not (playerDead p) && any (overlaps (playerHitbox p)) dangers = killPlayer p
-  | otherwise = p
+    | not (playerDead p) && any (overlaps (playerHitbox p)) dangers = killPlayer p
+    | otherwise = p
 
 -- ===================== Hammer Bros =====================
 
@@ -280,7 +280,7 @@ stepBro dt ps b
                 | t - dt > 0 -> (b' { broWindup = Just (t - dt) }, Nothing)
                 | otherwise  ->   -- release
                     ( b' { broWindup = Nothing, broCooldown = throwInterval - windupTime },
-                     fmap (throwAt hand) (broTarget b ps))
+                      fmap (throwAt hand) (broTarget b ps))
             Nothing
                 | broCooldown b > 0 -> (b' { broCooldown = broCooldown b - dt }, Nothing)
                 | Just _ <- broTarget b ps -> (b' { broWindup = Just windupTime }, Nothing)
@@ -301,7 +301,10 @@ throwAt (Vec2 sx sy) (Vec2 tx ty) = Hammer (Vec2 sx sy) (Vec2 vx vy) 0
 
 -- Hammers fly through blocks.
 stepHammer :: Float -> Hammer -> Hammer
-stepHammer dt h = h { hamPos = Vec2 (px + vx * dt) (py + vy' * dt), hamVel = Vec2 vx vy', hamAnim = hamAnim h + dt }
+stepHammer dt h = h { 
+    hamPos = Vec2 (px + vx * dt) (py + vy' * dt), 
+    hamVel = Vec2 vx vy', 
+    hamAnim = hamAnim h + dt }
     where
         Vec2 px py = hamPos h
         Vec2 vx vy = hamVel h
@@ -328,9 +331,9 @@ stompBro (p : ps) b
     | broDead b = (p : ps, b)
     | not (playerDead p) 
         && overlaps (playerHitbox p) (broHitbox b) 
-        && isStomp p (broPos b) = 
-        ( bounce p : ps
-        , b { broDead = True, broWindup = Nothing, broVel = Vec2 0 broDeathHop })
+        && isStomp p (broPos b) = ( 
+            bounce p : ps,
+            b { broDead = True, broWindup = Nothing, broVel = Vec2 0 broDeathHop })
     | otherwise = 
         let (ps', b') = stompBro ps b 
         in (p : ps', b')
