@@ -59,7 +59,7 @@ stepPlayer dt solids pl0
     | playerDead pl0 = fall pl0
     | otherwise      = respawnIfFallen (updateAnim dt move)
     where
-        move = dy (dx (updateVel dt (playerIn pl0) pl0))
+        move = moveY (moveX (updateVel dt (playerIn pl0) pl0))
         hits pl = any (overlaps (playerHitbox pl)) solids
         -- dead: just gravity, no collisions, until off screen
         fall pl =
