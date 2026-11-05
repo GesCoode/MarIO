@@ -3,7 +3,7 @@ module Physics (
     findSwitch)
     where
 
-import Data.List (find, foldl')
+import Data.List (find)
 
 import AI(
     stepEnemies,
@@ -58,20 +58,20 @@ step dt gs
         solids = map staticHitbox (lvlStatics (gsLevel gs))
         movedPlayers = map (stepPlayer dt solids) (gsPlayers gs)
         aiGs = stepEnemies dt solids (gs { gsPlayers = movedPlayers })
-        (pAfterGoombas, goombas, ptGoombas) = hitGoomba movedPlayers (gsGoombas aiGs)
-        (pAfterBros, bros, ptBros) = stompBros pAfterBros (gsBros aiGs)
-        (pAfterBoss, boss, ptBoss) = hitBoss pAfterBoss (gsBoss aiGs)
+        (pAfterGoombas, goombas, ptGoombas) = hitGoombas movedPlayers (gsGoombas aiGs)
+        (pAfterBros, bros, ptBros) = stompBros pAfterGoombas (gsBros aiGs)
+        (pAfterBoss, boss, ptBoss) = hitBoss pAfterBros (gsBoss aiGs)
         hamDanger = map hammerHitbox (gsHammers aiGs)
         broDanger = [broHitbox bro | bro <- bros, not (broDead bro)]
         bossDanger = case boss of 
-            Just boss | bossHealth boss > 0 && bossInvisible boss <= 0 -> [bossHitbox boss]
+            Just b | bossHealth b > 0 && bossInvisible b <= 0 -> [bossHitbox b]
             _ -> []
         pAfterAttack = map (hurtBy (hamDanger ++ broDanger ++ bossDanger)) pAfterBoss
         atGoal = any (\player -> not (playerDead player) &&
                      any (overlaps (playerHitbox player) . goalHitbox)
-                         (lvlGoal (gsLevel gs))) pAfterAttack
+                         (lvlGoals (gsLevel gs))) pAfterAttack
         defeatBoss = case boss of 
-            Just boss -> bossHealth boss <= 0
+            Just b -> bossHealth b <= 0
             Nothing -> False 
         state 
             | defeatBoss || atGoal = Win
@@ -84,7 +84,7 @@ goalHitbox point = Hitbox point 32 70 -- Adjust if necessary
 stepPlayer :: Float -> [Hitbox] -> Player -> Player
 stepPlayer dt solids pl0
     | playerDead pl0 = respawn (fallDown pl0)
-    | otherwise      = respawn (anim dt (moveY (moveX (updateVel dt pl0))))
+    | otherwise      = respawn (updateAnim dt (moveY (moveX (updateVel dt pl0))))
     where
         hits pl = find (overlaps (playerHitbox pl)) solids 
         
@@ -111,10 +111,10 @@ stepPlayer dt solids pl0
                 Nothing -> pl1 
                 Just box -> 
                     let corX 
-                        | vx > 0 = x (hbCenter box) - hbWidth box / 2 - playerW pl / 2
-                        | vx < 0 = x (hbCenter box) + hbWidth box / 2 + playerW pl / 2
-                        | otherwise = px 
-                    in pl { 
+                            | vx > 0 = x (hbCenter box) - hbWidth box / 2 - playerW pl / 2
+                            | vx < 0 = x (hbCenter box) + hbWidth box / 2 + playerW pl / 2
+                            | otherwise = px 
+                    in pl {
                         playerPos = Vec2 corX py, 
                         playerVel = Vec2 0 vy }
                     
@@ -126,12 +126,12 @@ stepPlayer dt solids pl0
                 Nothing -> pl1 
                 Just box -> 
                     let corY 
-                        | vy > 0 = y (hbCenter box) + hbHeight box / 2 + playerH pl / 2
-                        | vy < 0 = y (hbCenter box) - hbHeight box / 2 - playerH pl / 2
-                        | otherwise = py
+                            | vy > 0 = y (hbCenter box) + hbHeight box / 2 + playerH pl / 2
+                            | vy < 0 = y (hbCenter box) - hbHeight box / 2 - playerH pl / 2
+                            | otherwise = py
                     in pl { 
-                        playerPos = Vec2 corX py corY, 
-                        playerVel = Vec2 0 vy,
+                        playerPos = Vec2 px corY, 
+                        playerVel = Vec2 vx 0,
                         onGround = vy < 0 }
 
 updateVel :: Float -> Player -> Player
@@ -139,13 +139,13 @@ updateVel dt p = p {playerVel = Vec2 vx4 vy2}
     where
         input = playerIn p
         Vec2 vx0 vy0 = playerVel p
-        dir = fromIntegral (fromEnum(inRight input) - fromEnum (inLeft input)
+        dir = fromIntegral (fromEnum(inRight input) - fromEnum (inLeft input))
         vx1 = vx0 + dir * accel * dt
         vx2 
             | dir == 0 && onGround p = signum vx1 * max 0 (abs vx1 - friction * dt)
             | otherwise = vx1
         vx4 = max (-maxSpeed) (min maxSpeed vx2)
-        vy1 = if inJump input && onGround then jumpSpeed else vy0            
+        vy1 = if inJump input && onGround p then jumpSpeed else vy0       
         vy2 = max (-maxFallSpeed) (vy1 - gravity * dt)
            
 -- Constants in addition to those from AI
@@ -168,7 +168,7 @@ updateAnim dt p = p { facingRight = facing, walkPhase = phase }
         phase 
             | not (onGround p) = walkPhase p
             | abs vx < 1       = 0
-            | otherwise        = walkPhase p + abs vx * dt / stepLength
+            | otherwise        = walkPhase p + abs vx * dt / 20
 
 stompBounce, deathHop :: Float 
 stompBounce = 350    -- player bounce after a stomp
@@ -201,17 +201,17 @@ hitGoombas :: [Player] -> [Goomba] -> ([Player], [Goomba], Int)
 hitGoombas ps []         = (ps, [], 0)
 hitGoombas ps (gb : gbs) =
     let (ps1, gb1, pt)  = hitGoomba ps gb
-        (ps2, gbs1, pts) = resolveHits ps1 gbs
-    in (ps2, gb1 : gbs1)
+        (ps2, gbs1, pts) = hitGoombas ps1 gbs
+    in (ps2, gb1 : gbs1, pt + pts)
 
 hitGoomba :: [Player] -> Goomba -> ([Player], Goomba, Int)
 hitGoomba [] gb = ([], gb, 0)
 hitGoomba (p : ps) gb
-    | gState gb /= Walking = (p : ps, gb)
+    | gState gb /= Walking = (p : ps, gb, 0)
     | playerDead p || not (overlaps (playerHitbox p) (goombaHitbox gb)) =
         let (ps', new, pt) = hitGoomba ps gb 
         in (p : ps', new, pt)
-    | is Stomp p (gPos gb) = (bounce p : ps, gb { gState = Flat flatTime, gVel = Vec2 0 0 })
+    | isStomp p (gPos gb) = (bounce p : ps, gb { gState = Flat 0.4, gVel = Vec2 0 0 }, 100)
     | otherwise = (killPlayer p : ps, gb, 0)
     
 -- Each living bro checks the players in order; the first one stomping him wins.
@@ -229,7 +229,7 @@ stompBro (p : ps) b
     | broDead b = (p : ps, b, 0)
     | not (playerDead p) && overlaps (playerHitbox p) (broHitbox b)  && isStomp p (broPos b) = (
         bounce p : ps, 
-        b { broDead = True, broWindup = Nothing, broVel = Vec2 0 broDeathHop} 200 )
+        b { broDead = True, broWindup = Nothing, broVel = Vec2 0 300 }, 200 )
     | otherwise =
         let (ps', new, pt) = stompBro ps b
         in (p : ps', new, pt)
@@ -256,7 +256,7 @@ findP ps b = case c of
     [] -> Nothing
     i : _ -> Just i 
     where 
-        p = 
+        c = 
             [ i
             | (i, p) <- zip [0 :: Int ..] ps
             , not (playerDead p)
@@ -268,9 +268,9 @@ findSwitch n gs = case drop n (gsPlayers gs) of
     [] -> Nothing
     p : _ 
         | playerDead p -> Nothing
-        | otherwise -> case filter (avail p) (lvlSwitch (gsLevel gs)) of
+        | otherwise -> case filter (avail p) (lvlSwitches (gsLevel gs)) of
             [] -> Nothing
             s : _ -> Just (switchType s)
     where 
-        avail p s = overlaps (playerHitbox p) (Hitbox switchPos s) 48 64) -- Adjust if necessary
+        avail p s = overlaps (playerHitbox p) (Hitbox (switchPos s) 48 64) -- Adjust if necessary
             

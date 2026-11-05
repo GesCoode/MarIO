@@ -22,7 +22,7 @@ parseLevelFile :: String -> Either String LevelFile
 parseLevelFile input = do
     (level, rest) <- levelFile (skipSpace input)
     case skipSpace rest of
-        ""       -> Right level
+        ""       -> validateLevel level
         leftover -> Left ("Unexpected trailing input: " ++ take 40 leftover)
 
 -- | Check constraints for full level 
@@ -30,7 +30,7 @@ validateLevel :: LevelFile -> Either String LevelFile
 validateLevel level
     | null (lfPlayers level) = Left "Level must contains at least one player's starting position."
     | length (lfGoals level) > 1 = Left "Level may contain max. one goal."
-    | length (lfBoss level) > 1 = Left "A level may contain max. one boss."
+    | length (lfBosses level) > 1 = Left "A level may contain max. one boss."
     | otherwise = Right level
     
 -- | Level contains platforms, players, Goomba's, and Hammer Bros. 
@@ -208,4 +208,4 @@ readSwitch input = do
         "level2" -> createSwitch (ToHorizontal Level2)
         "level3" -> createSwitch (ToHorizontal Level3)
         "end" -> createSwitch ToEnd
-        _ -> Left ("Unknown switch type: " ++ goal ".")
+        _ -> Left ("Unknown switch type: " ++ goal ++  ".")

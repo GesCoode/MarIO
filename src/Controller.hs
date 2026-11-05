@@ -69,7 +69,7 @@ startLevel lvl app = do
     res <- try (loadLevel lvl) :: IO (Either IOException Level)
     case res of 
         Left err -> do
-            hPutStrLn stderr ("Level couldn't be loaded: " ++ show err)
+            PutStrLn stderr ("Level couldn't be loaded: " ++ show err)
             pure app
         Right loaded -> 
             case mkGameState (playerSelect app) loaded of 

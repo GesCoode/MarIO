@@ -33,7 +33,7 @@ loadLevel lid = case levelPath lid of
     
 -- | Load a level JSON file for the given LevelId.
 loadExampleLevel :: LevelId ->FilePath -> IO Level
-loadLevel lid path = do
+loadExampleLevel lid path = do
     exist <- doesFileExist path
     if not exist 
         then ioError (userError ("Level file is missing: " ++ path))
@@ -41,7 +41,7 @@ loadLevel lid path = do
     raw <- readFile path
     case parseLevelFile (stripBom raw) of
         Left err -> ioError (userError ("Failed to load (" ++ path ++ "): " ++ err))
-        Right (LevelFile sts pls gbs bros goals boss) -> do
+        Right ids -> do
             let level = createLevel lid ids
             case validateStartpos level of 
                 Left err -> ioError (userError ("Invalid level (" ++ path ++ "):" ++ err))
@@ -49,8 +49,8 @@ loadLevel lid path = do
                     -- Check all images
                     let pictures = [ "Asserts/" ++ soSprite obj ++ ".bmp" 
                                    | obj <- lvlStatics level]
-                    exist <- mapM doesFileExist pictures
-                    case [name | (name, found) <- zip pictures exist, not found] of 
+                    existing <- mapM doesFileExist pictures
+                    case [name | (name, found) <- zip pictures existing, not found] of 
                         [] -> pure level
                         missing : _ -> ioError (userError ("Image missing: " ++ missing))
 
@@ -62,7 +62,7 @@ stripBom xs              = xs
 -- | Check that player doesn't start in static
 validateStartpos :: Level -> Either String ()
 validateStartpos level
-    | any overlapStatic (lvlPlayer level) = Left "Player starts inside static."
+    | any overlapStatic (lvlPlayers level) = Left "Player starts inside static."
     | otherwise = Right () 
     where 
         staticCell = map staticHitbox (lvlStatics level)

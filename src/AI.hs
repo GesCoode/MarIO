@@ -1,6 +1,10 @@
-module AI (stepEnemies) where
+module AI (
+    stepEnemies,
+    gravity,
+    maxFallSpeed,
+    removeBelowY) where
 
-import Data.List (minimumBy)
+import Data.List (mapAccumL, minimumBy)
 import Data.Ord (comparing)
 
 import GameData ( 
@@ -74,10 +78,10 @@ walkDistance = 20
 
 -- | Goomba walks, falls, gets squished or disappears after death
 stepGoomba :: Float -> [Hitbox] -> Int -> Goomba -> (Int, Goomba)
-stepGoomba dt plftms seed goomba = case gState goomba of 
+stepGoomba dt pltfrms seed goomba = case gState goomba of 
     Walking -> (seed, moveGoomba dt pltfrms goomba)
     Flat rest 
-        | rest > dt -> (seed, goomba { gState = Flat (rest - dt) }
+        | rest > dt -> (seed, goomba { gState = Flat (rest - dt) })
         | otherwise -> 
             let next = nextSeed seed
                 finalSeed = nextSeed next
@@ -89,8 +93,8 @@ stepGoomba dt plftms seed goomba = case gState goomba of
             Vec2 vx vy = gVel goomba
             vy' = vy - gravity * dt
         in (seed, goomba {
-        gPos = Vec2 (px + vx * dt) (py + vy' * dt),
-        gVel = Vec2 vx vy' })
+            gPos = Vec2 (px + vx * dt) (py + vy' * dt),
+            gVel = Vec2 vx vy' })
 
 -- | Turn when edge or wall
 moveGoomba :: Float -> [Hitbox] -> Goomba -> Goomba
@@ -98,15 +102,15 @@ moveGoomba dt pltfrms goomba = goomba {
     gPos = pos2,
     gVel = Vec2 (dir2 * goombaSpeed) vertSpeed2,
     gDir = dir2, 
-    gPhase = gPhase goomba + gVel * dt / walkDistance}
+    gPhase = gPhase goomba + goombaSpeed * dt / walkDistance}
     where 
         Vec2 px py = gPos goomba
         direction = gDir goomba
-        speedY = max (-maxFallSpeed) (y (gVel goomba) - grav * dt)
+        speedY = max (-maxFallSpeed) (y (gVel goomba) - gravity * dt)
         newX = Vec2 (px + direction * goombaSpeed * dt) py
         hitboxAt point = (goombaHitbox goomba) { hbCenter = point}
         hits box = any (overlaps box) pltfrms
-        onPltfrm = hit (hitboxAt (Vec2 px (py - 2)))
+        onPltfrm = hits (hitboxAt (Vec2 px (py - 2)))
         feet = Vec2 (x newX + direction * goombaW / 2) (py - goombaH / 2 - 2)
         offEdge = onPltfrm && not (hits (Hitbox feet 2 2))
         turn = hits (hitboxAt newX) || offEdge
@@ -123,9 +127,8 @@ nearestPlayer o players = case p of
     [] -> Nothing
     _ -> Just (snd (minimumBy (comparing fst) p))
     where 
-        p = [
-        (distQuad o (playerSpawn player), playerSpawn player)
-        | player <- players, not (playerDead player)]       
+        p = [(distQuad o (playerSpawn player), playerSpawn player)
+            | player <- players, not (playerDead player)]       
 
 distQuad :: Vec2 -> Vec2 -> Float
 distQuad (Vec2 ax ay) (Vec2 bx by) = (ax - bx) ^ (2 :: Int) + (ay - by) ^ (2 :: Int)
@@ -140,9 +143,9 @@ throwAt (Vec2 sx sy) (Vec2 tx ty) = Hammer (Vec2 sx sy) (Vec2 vx vy) 0
         vx = dx / airtime
         vy = dy / airtime + 0.5 * gravity * airtime
 
-broReach, broInteral, windUp :: Float
+broReach, broInterval, windUp :: Float
 broReach = 440
-broPause = 2.4
+broInterval = 2.4
 windUp = 0.4
 
 -- | HammerBro chooses target and preps throw 
@@ -159,19 +162,19 @@ stepBro dt players bro
                 withAnim { 
                     broWindup = Nothing, 
                     broCooldown = broInterval },
-                maybeThrow target )
+                maybeThrow targets )
         Nothing 
-            | broCooldown bro > 0 -> (withAnim { broCooldown = max 0 (broCooldown bro - odt) }, [])
-            | Just _ <- target -> (withAnim { broWindup = Just windUp }, [])
+            | broCooldown bro > 0 -> (withAnim { broCooldown = max 0 (broCooldown bro - dt) }, [])
+            | Just _ <- targets -> (withAnim { broWindup = Just windUp }, [])
             | otherwise -> (withAnim, [])
     where 
         Vec2 px py = broPos bro
         Vec2 vx vy = broVel bro
         newVy = vy - gravity * dt
         withAnim = bro { broAnim = broAnim bro + dt }
-        target = do 
+        targets = do 
             target <- nearestPlayer (broPos bro) players
-            if distQuad (broPos bro) - 10) (y (broPos bro) + 30)
+            if distQuad (broPos bro) target <= broReach * broReach
                 then Just target else Nothing
         hand = Vec2 (x (broPos bro) - 10) (y (broPos bro) + 30)
         maybeThrow Nothing = []
@@ -188,7 +191,7 @@ stepBoss dt players boss
             cooldown { bossCooldown = interval },
             map (`throwAt` target) targetpoints )
     where 
-        cooldown = bass {
+        cooldown = boss {
             bossCooldown = max 0 (bossCooldown boss - dt),
             bossInvisible = max 0 (bossInvisible boss - dt) }
         interval = if bossPhase boss == 1 then 1.8 else 0.9
@@ -204,8 +207,8 @@ stepHammer dt hammer = hammer {
     hamAnim = hamAnim hammer + dt }
     where 
         Vec2 px py = hamPos hammer
-        Vec2 vy xy = hamVel hammer
-        vy' = vy - grav * dt
+        Vec2 vx vy = hamVel hammer
+        vy' = vy - gravity * dt
       
 visGoomba :: Goomba -> Bool
 visGoomba enemy = 

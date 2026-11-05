@@ -19,8 +19,8 @@ nextSeed :: Int -> Int
 nextSeed n = (n * 1103515245 + 12345) `mod` 2147483648
 
 -- | Vertical platforms
-createVert :: Int -> Level
-createVert seed = Level {
+createVert :: Int -> SwitchType ->  Level
+createVert seed spot = Level {
     lvlId = RandomVertical,
     lvlStatics = ground : platforms,
     lvlPlayers = [
@@ -28,7 +28,7 @@ createVert seed = Level {
         PlayerStart (Vec2 (-250) (-215)) (Vec2 0 0)],
     lvlGoombas = [GoombaStart (Vec2 firstX (-142)) 1],
     lvlBros = [],
-    lvlGoals = [Vec2 finalX 211],
+    lvlGoals = [Vec2 lastX 211],
     lvlBosses = [],
     lvlSwitches = [Switch (Vec2 lastX 243) spot]}
     where 
@@ -44,7 +44,7 @@ createVert seed = Level {
         firstX = case xValues of 
             [] -> initX
             xPos : _ -> xPos
-        lastX = fold (\_ xPos -> xPos) initX xValues
+        lastX = foldl (\_ xPos -> xPos) initX xValues
         
 -- | Check measurements 
 checkAvail :: Level -> Bool
@@ -60,8 +60,8 @@ checkAvail lvl =
             [] -> []
             _ : rest -> rest
         inFrame frame =
-            abs (x (hbCenter frame)) + hbWidth frame / 2 <= 400 &&
-            abs (y (hbCenter frame)) + hbHeight frame / 2 <= 300
+            abs (x (soCenter frame)) + soWidth frame / 2 <= 400 &&
+            abs (y (soCenter frame)) + soHeight frame / 2 <= 300
         inRangeJump from to =
-            abs (x (hbCenter to) - x(hbWidth from)) <= 120 &&
-            abs (y (hbCenter to) - y(hbHeight from)) <= 260
+            abs (x (soCenter to) - x(soCenter from)) <= 120 &&
+            abs (y (soCenter to) - y(soCenter from)) <= 260
