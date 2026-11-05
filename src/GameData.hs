@@ -56,8 +56,7 @@ levelPath Level2  = Just "Levels/level2.json"
 levelPath Level3  = Just "Levels/level3.json"
 levelPath RandomVertical = Nothing
 
--- | Switches: [x, y, "vertical"/"continue"]
-data SwitchType = ToVertical | ToContinue
+data SwitchType = ToVertical | ToHorizontal LevelId
     deriving (Eq)
 
 data Switch = Switch {

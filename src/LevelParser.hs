@@ -3,14 +3,15 @@ module LevelParser (parseLevelFile) where
 import Data.Char (isDigit, isSpace)
 import Text.Read (readMaybe)
 
-import GameData
-  ( BroStart (..)
-  , GoombaStart (..)
-  , LevelFile (..)
-  , PlayerStart (..)
-  , StaticObj (..)
-  , Vec2 (Vec2)
-  )
+import GameData ( 
+    BroStart (..),
+    GoombaStart (..),
+    LevelFile (..),
+    PlayerStart (..),
+    StaticObj (..),
+    Vec2 (Vec2),
+    Switch (..),
+    SwitchType (..))
 
 -- | Parser returns a value and the not-yet processed input. Errors are shown using Left. 
 type Parser a = String -> Either String (a, String)
@@ -23,19 +24,29 @@ parseLevelFile input = do
         ""       -> Right level
         leftover -> Left ("Unexpected trailing input: " ++ take 40 leftover)
 
--- | Level contains platforms, players, Goomba's, and Hammer Bros. Enemy-lists are optional. 
+-- | Check constraints for full level 
+validateLevel :: LevelFile -> Either String LevelFile 
+validateLevel level
+    | null (lfPlayers level) = Left "Level must contains at least one player's starting position."
+    | length (lfGoals level) > 1 = Left "Level may contain max. one goal."
+    | length (lfBoss level) > 1 = Left "A level may contain max. one boss."
+    | otherwise = Right level
+    
+-- | Level contains platforms, players, Goomba's, and Hammer Bros. 
+--   Enemy-lists are optional, as well as goals, bosses, and switches.
 levelFile :: Parser LevelFile
-levelFile s0 = do
-  ((), s1) <- expect '[' s0
-  (statics, s2) <- listOf staticObj (skipSpace s1)
-  ((), s3) <- expect ',' (skipSpace s2)
-  (players, s4) <- listOf playerStart (skipSpace s3)
-  -- optional third list: goombas
-  (goombas, s5) <- optionalList goombaStart s4
-  -- optional fourth list: hammer bros
-  (bros, s6) <- optionalList broStart s5
-  ((), s7) <- expect ']' (skipSpace s6)
-  Right (LevelFile statics players goombas bros, s7)
+levelFile input = do
+    ((), s1) <- expect '[' input
+    (statics, s2) <- listOf staticObj (skipSpace s1)
+    ((), s3) <- expect ',' (skipSpace s2)
+    (players, s4) <- listOf playerStart (skipSpace s3)
+    (goombas, s5) <- optionalList goombaStart s4
+    (bros, s6) <- optionalList broStart s5
+    (goals, s7) <- optionalList readPos s6
+    (bosses, s8) <- optionalList readPos s7
+    (switches, s9) <- optionalList readSwitch s8
+    ((), s10) <- expect ']' (skipSpace s9)
+    Right (LevelFile statics players goombas bros goals bosses switches, s10)
 
 -- | Read an optional list, which is preceded by a comma.
 --   Otherwise an empty list.
@@ -45,15 +56,21 @@ optionalList item s0 =
         ',' : rest -> listOf item (skipSpace rest)
         rest       -> Right ([], rest)
 
--- | Read Hammer Bro-startingposition: [x, y].
-broStart :: Parser BroStart
-broStart s0 = do
-    ((), s1) <- expect '[' s0
+-- | Read position: [x, y] 
+readPos :: Parser Vector2
+readPos input = do
+    ((), s1) <- expect '[' input
     (cx, s2) <- number (skipSpace s1)
     ((), s3) <- expect ',' (skipSpace s2)
     (cy, s4) <- number (skipSpace s3)
     ((), s5) <- expect ']' (skipSpace s4)
-    Right (BroStart (Vec2 cx cy), s5)
+    Right (Vector2 cx cy, s5)
+    
+-- | Read Hammer Bro-startingposition: [x, y].
+broStart :: Parser BroStart
+broStart input = do
+    (position, rest) <- readPos input
+    Right (BroStart position, rest)
 
 -- | Read Goomba: [x, y, dir]
 --   Direction: -1 (left) or 1 (right).
@@ -66,15 +83,14 @@ goombaStart s0 = do
     ((), s5) <- expect ',' (skipSpace s4)
     (dir, s6) <- number (skipSpace s5)
     ((), s7) <- expect ']' (skipSpace s6)
-    
     if dir == -1 || dir == 1
         then Right (GoombaStart (Vec2 cx cy) dir, s7)
         else Left "Invalid Goomba direction: use -1 or 1."
 
 -- | Read a platform: [x, y, w, h, "sprite"]        
 staticObj :: Parser StaticObj
-staticObj s0 = do
-    ((), s1) <- expect '[' s0
+staticObj input = do
+    ((), s1) <- expect '[' input
     (cx, s2) <- number (skipSpace s1)
     ((), s3) <- expect ',' (skipSpace s2)
     (cy, s4) <- number (skipSpace s3)
@@ -85,24 +101,23 @@ staticObj s0 = do
     ((), s9) <- expect ',' (skipSpace s8)
     (sprite, s10) <- stringLit (skipSpace s9)
     ((), s11) <- expect ']' (skipSpace s10)
-
     if w > 0 && h > 0 && not (null sprite)
         then Right (StaticObj (Vec2 cx cy) w h sprite, s11)
         else Left "A platform must have positive dimensions and a spritename"
          
 -- | Read a player initialisation: [x, y, vx, vy]   
 playerStart :: Parser PlayerStart
-playerStart s0 = do
-  ((), s1) <- expect '[' s0
-  (cx, s2) <- number (skipSpace s1)
-  ((), s3) <- expect ',' (skipSpace s2)
-  (cy, s4) <- number (skipSpace s3)
-  ((), s5) <- expect ',' (skipSpace s4)
-  (vx, s6) <- number (skipSpace s5)
-  ((), s7) <- expect ',' (skipSpace s6)
-  (vy, s8) <- number (skipSpace s7)
-  ((), s9) <- expect ']' (skipSpace s8)
-  Right (PlayerStart (Vec2 cx cy) (Vec2 vx vy), s9)
+playerStart input = do
+    ((), s1) <- expect '[' input
+    (cx, s2) <- number (skipSpace s1)
+    ((), s3) <- expect ',' (skipSpace s2)
+    (cy, s4) <- number (skipSpace s3)
+    ((), s5) <- expect ',' (skipSpace s4)
+    (vx, s6) <- number (skipSpace s5)
+    ((), s7) <- expect ',' (skipSpace s6)
+    (vy, s8) <- number (skipSpace s7)
+    ((), s9) <- expect ']' (skipSpace s8)
+    Right (PlayerStart (Vec2 cx cy) (Vec2 vx vy), s9)
 
 -- | Parse a list between square brackets.
 -- Ending with a comma is not allowed.
@@ -130,7 +145,6 @@ number s0 = do
             '-' : s -> ("-", s)
             _       -> ("", s0)
         (whole, restWhole) = span isDigit rest
-        
     if null whole
         then Left "Expected a number."
         else if leadingZero whole
@@ -140,9 +154,7 @@ number s0 = do
                     case span isDigit fracInput of 
                         ("", _) -> Left "Expected digits after decimal point."
                         (frac, restN) ->
-                            readFloat
-                                (n ++ whole ++ "." ++ frac)
-                                restN
+                            readFloat (n ++ whole ++ "." ++ frac) restN
                 _ -> readFloat (n ++ whole) restWhole
     where 
         leadingZero ('0' : _ : _) = True
@@ -170,9 +182,24 @@ stringLit _ = Left "Expected string between double quotes."
 -- | Check if next char corresponds with expected char
 expect :: Char -> Parser ()
 expect c (ch : xs)
-  | ch == c   = Right ((), xs)
-  | otherwise = Left ("Expected '" ++ [c] ++ "', but got '" ++ [ch] ++ "'.")
+    | ch == c   = Right ((), xs)
+    | otherwise = Left ("Expected '" ++ [c] ++ "', but got '" ++ [ch] ++ "'.")
 expect c []   = Left ("Expected '" ++ [c] ++ "', but got end of input.")
 
 skipSpace :: String -> String
 skipSpace = dropWhile isSpace
+
+-- | Switch: [x, y, "vertical"] or [x, y, "horizontal"]
+readSwitch :: Parser Switch
+readSwitch input = do
+    ((), s1) <- expect '[' input
+    (cx, s2) <- number (skipSpace s1)
+    ((), s3) <- expect ',' (skipSpace s2)
+    (cy, s4) <- number (skipSpace s3)
+    ((), s5) <- expect ',' (skipSpace s4)
+    (goal, s6) <- stringLit (skipSpace s5)
+    ((), s7) <- expect ',' (skipSpace s6)
+    case goal of 
+        "vertical" -> Right (Switch (Vec2 cx cy) ToVertical, s7)
+        "horizontal" -> Right (Switch (Vec2 cx cy) ToHorizontal)
+        _ -> Left "Unknown switch type: use 'vertical' or 'horizontal'."
