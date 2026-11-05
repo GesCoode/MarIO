@@ -2,42 +2,16 @@ module View (drawApp) where
 
 import Graphics.Gloss
 import GameData (
-    AppState (..), 
-    Boss (..),
-    GameState (..),
-    GameStatus (..),
-    GameMode (..),
-    Goomba (..), 
-    GoombaState (..), 
-    Hammer (..), 
-    HammerBro (..), 
-    Highscore (..),
-    Hitbox (..), 
-    Level (..), 
-    LevelId (..), 
-    Player (..), 
-    PlayerSelect (..),
-    Screen (..), 
-    SpriteAtlas,
-    StaticObj (..), 
-    Switch (..),
-    SwitchType (..),
-    Vec2 (..), 
-    bossHitbox,
-    broHitbox, 
-    goombaHitbox, 
-    hammerHitbox, 
-    levelName, 
-    playerHitbox)
-
+    AppState (..), Boss (..), GameState (..), GameStatus (..), GameMode (..),
+    Goomba (..), GoombaState (..), Hammer (..), HammerBro (..), Highscore (..),
+    Hitbox (..), Level (..), LevelId (..), Player (..), PlayerSelect (..),
+    Screen (..), SpriteAtlas, StaticObj (..), Switch (..), SwitchType (..),
+    Vec2 (..), bossHitbox, broHitbox, goombaHitbox,  hammerHitbox, 
+    levelName, playerHitbox)
+import Physics (findSwitch)
 import Menu (
-    menuButtons,
-    menuW,
-    menuH,
-    playerBtn,
-    playerBtnW,
-    playerBtnH,
-    playerBtnY)
+    MenuSelect (..), menuButtons, menuW, menuH, playerBtn,
+    playerBtnW, playerBtnH, playerBtnY)
 
 grayButton :: Color
 grayButton = makeColor 0.45 0.45 0.45 1.0

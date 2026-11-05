@@ -218,7 +218,7 @@ data AppState = AppState {
     sprites       :: SpriteAtlas,
     playerSelect  :: PlayerSelect,
     message       :: Maybe String,
-    scores        :: [Highscore],
+    highscores        :: [Highscore],
     levelUnlocked :: Int,
     seed          :: Int}
 
