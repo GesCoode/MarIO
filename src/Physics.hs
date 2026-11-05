@@ -57,7 +57,7 @@ stepWorld dt gs
 stepPlayer :: Float -> [Hitbox] -> Player -> Player
 stepPlayer dt solids pl0
     | playerDead pl0 = fall pl0
-    | otherwise      = respawnIfFallen (updateAnim dt (moveY (moveX (updateVel dt (playerIn pl0) pl0))))
+    | otherwise      = respawnIfFallen (updateAnim dt move)
     where
         move = dy (dx (updateVel dt (playerIn pl0) pl0))
         hits pl = any (overlaps (playerHitbox pl)) solids
