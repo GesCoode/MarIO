@@ -23,7 +23,7 @@ createLevel lid ids = Level {
     lvlBros = lfBros ids,
     lvlGoals = lfGoals ids,
     lvlBosses = lfBosses ids,
-    lvlSwitches = lfSwitches}
+    lvlSwitches = lfSwitches ids}
 
 -- | Read Level; parsing continues. 
 loadLevel :: LevelId -> IO Level
@@ -47,9 +47,8 @@ loadLevel lid path = do
                 Left err -> ioError (userError ("Invalid level (" ++ path ++ "):" ++ err))
                 Right () -> do 
                     -- Check all images
-                    let pictures = [
-                        "Asserts/" ++ soSprite obj ++ ".bmp" | 
-                        obj <- lvlStatics level]
+                    let pictures = [ "Asserts/" ++ soSprite obj ++ ".bmp" 
+                                   | obj <- lvlStatics level]
                     exist <- mapM doesFileExist pictures
                     case [name | (name, found) <- zip pictures exist, not found] of 
                         [] -> pure level

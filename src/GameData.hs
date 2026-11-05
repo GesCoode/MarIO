@@ -56,11 +56,11 @@ levelPath Level2  = Just "Levels/level2.json"
 levelPath Level3  = Just "Levels/level3.json"
 levelPath RandomVertical = Nothing
 
-data SwitchType = ToVertical | ToHorizontal LevelId
+data SwitchType = ToVertical | ToHorizontal LevelId | ToEnd
     deriving (Eq)
 
 data Switch = Switch {
-    switchPos :: Vec2
+    switchPos :: Vec2,
     switchType :: SwitchType}
     deriving (Eq)
     
@@ -197,7 +197,6 @@ data GameState = GameState {
     gsLevel        :: Level, 
     gsPlayerSelect :: PlayerSelect,
     gsMode         :: GameMode,
-    gsNextLevel    :: Maybe LevelId,
     gsStatus       :: GameStatus,
     gsPlayers      :: [Player],   -- index 0 = WASD, index 1 = arrows
     gsGoombas      :: [Goomba],
@@ -260,7 +259,6 @@ mkGameStateMode select mode lvl
         gsLevel        = lvl,
         gsPlayerSelect = select,
         gsMode         = mode,
-        gsNextLevel    = Nothing
         gsStatus       = InProgress,
         gsPlayers      = take (selectPlayer select) (map spawnPlayer (lvlPlayers lvl)),
         gsGoombas      = map spawnGoomba (lvlGoombas lvl),
