@@ -27,7 +27,7 @@ import GameData (
     Player (..),
     Screen (..),
     SwitchType (..),
-    mkGameStateMode (..))
+    mkGameStateMode)
     
 import LevelLoad (loadLevel)
 import Menu (MenuSelect (..), hitTest, hitTestPlayers)
