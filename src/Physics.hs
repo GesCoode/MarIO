@@ -193,7 +193,7 @@ killPlayer pl
     | playerDead pl || playerHealth pl <= 0 = pl 
     | otherwise = pl {
         playerDead = True,
-        playerHeallth = playerHealth pl - 1,
+        playerHealth = playerHealth pl - 1,
         playerVel = Vec2 0 deathHop,
         onGround = False}
 
