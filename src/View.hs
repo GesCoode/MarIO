@@ -121,12 +121,12 @@ healthRow atlas row name p = translate (-380) (232 - 34 * fromIntegral row) $ pi
 cameraRange :: GameState -> (Float, Float)
 cameraRange gs
     | null statics = (0, 0)
-    | right < left = let mid = (left + right) / 2 in (mid, mid)   -- level narrower than the screen
+    | right < left = let mid = (left + right) / 2 in (mid, mid)
     | otherwise    = (left, right)
     where
         statics = lvlStatics (gsLevel gs)
-        left    = minimum (map (hbLeft . staticHitbox) statics) + halfW
-        right   = maximum (map (hbRight . staticHitbox) statics) - halfW
+        left    = minimum (map (hbLeft . hitbox) statics) + halfW
+        right   = maximum (map (hbRight . hitbox) statics) - halfW
 
 cameraX :: GameState -> Float
 cameraX gs
@@ -205,7 +205,7 @@ tiled (texW, texH) w h pic = pictures
         th = h / fromIntegral ny
 
 drawPlayer :: SpriteAtlas -> Bool -> Char -> Player -> Picture
-drawPlayer atlas debug ch p = drawSprite atlas debug (playerHitbox p) sprite normal white
+drawPlayer atlas debug ch p = drawSprite atlas debug (hitbox p) sprite normal white
     where
         dir = if facingRight p then 'R' else 'L'
         sprite
@@ -214,7 +214,7 @@ drawPlayer atlas debug ch p = drawSprite atlas debug (playerHitbox p) sprite nor
             | otherwise    = [ch, 'J', dir]
 
 drawGoomba :: SpriteAtlas -> Bool -> Goomba -> Picture
-drawGoomba atlas debug gb = drawSprite atlas debug (goombaHitbox gb) sprite normal (makeColor 0.6 0.3 0.1 1.0)
+drawGoomba atlas debug gb = drawSprite atlas debug (hitbox gb) sprite normal (makeColor 0.6 0.3 0.1 1.0)
     where
         sprite = case gState gb of
             Walking -> "GW" ++ frame (gPhase gb) 3
@@ -225,7 +225,7 @@ drawGoomba atlas debug gb = drawSprite atlas debug (goombaHitbox gb) sprite norm
 drawBro :: SpriteAtlas -> Bool -> HammerBro -> Picture
 drawBro atlas debug b = drawSprite atlas debug box sprite size (makeColor 0.2 0.7 0.3 1.0)
     where
-        hb = broHitbox b
+        hb = hitbox b
         (sprite, (dx, dy), size)
             | broDead b             = ("HI0", (0, 0), (pixelScale, -pixelScale))
             | Just _ <- broWindup b = ("HT", (8, 7), normal)
@@ -234,13 +234,13 @@ drawBro atlas debug b = drawSprite atlas debug box sprite size (makeColor 0.2 0.
 
 -- Spin. The. HAMMER.
 drawHammer :: SpriteAtlas -> Bool -> Hammer -> Picture
-drawHammer atlas debug h = drawSprite atlas debug (hammerHitbox h) ("H" ++ frame (hamAnim h * 14) 7) normal white
+drawHammer atlas debug h = drawSprite atlas debug (hitbox h) ("H" ++ frame (hamAnim h * 14) 7) normal white
 
 
 drawBoss :: SpriteAtlas -> Bool -> [Player] -> Boss -> Picture
 drawBoss atlas debug players b
     | bossHealth b <= 0 || flicker = blank
-    | otherwise = drawSprite atlas debug (bossHitbox b) sprite (3 * facing, 3) (makeColor 0.8 0.1 0.1 1.0)
+    | otherwise = drawSprite atlas debug (hitbox b) sprite (3 * facing, 3) (makeColor 0.8 0.1 0.1 1.0)
     where
         bx      = x (bossPos b)
         hurt    = bossInvisible b > 0

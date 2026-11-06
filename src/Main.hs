@@ -6,6 +6,7 @@ import System.Directory (doesFileExist)
 
 import Data.List (sortBy)
 import Data.Ord (comparing, Down (..))
+import Data.Time.Clock.POSIX (getPOSIXTime)
 
 import Controller (handleEvent, stepApp)
 import GameData (AppState (..), Highscore (..), SpriteAtlas, initialApp)
@@ -42,7 +43,6 @@ backgroundSprites = ["1-1-Background", "Clouds", "BossFightBackground"]
 heartSprites :: [String]
 heartSprites = ["FullHeart", "EmptyHeart"]
 
--- Boss: BT0/BT1 about to act or jumping, BTN neutral/hurt.
 bossSprites :: [String]
 bossSprites = ["BT0", "BT1", "BTN"]
 
@@ -66,8 +66,10 @@ main :: IO ()
 main = do
     atlas <- loadSprites
     scores <- loadScores
+    now <- getPOSIXTime
     let app0 = (initialApp atlas) {
-            highscores = sortBy (comparing (Down . hsScore)) (either (const []) id scores) }
+            highscores = sortBy (comparing (Down . hsScore)) (either (const []) id scores),
+            seed = floor (now * 1000) `mod` 2147483648 }
     playIO
         (InWindow "MarIO" (800, 600) (100, 100))
         black

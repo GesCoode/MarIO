@@ -36,8 +36,8 @@ step dt gs
         gsStatus  = status }
     where
         lvl    = gsLevel gs
-        solids = map staticHitbox (lvlStatics lvl)
-        oneWay = map staticHitbox (lvlPlatforms lvl)
+        solids = map hitbox (lvlStatics lvl)
+        oneWay = map hitbox (lvlPlatforms lvl)
         (bottomY, respawnAt) = fallLimits gs
 
         ps0   = map (stepPlayer dt solids oneWay bottomY respawnAt) (gsPlayers gs)
@@ -47,15 +47,15 @@ step dt gs
         (ps1, goombas, pts1) = forEach hitGoomba ps0 (gsGoombas moved)
         (ps2, bros,    pts2) = forEach stompBro  ps1 (gsBros moved)
         (ps3, boss,    pts3) = forEach hitBoss   ps2 (gsBoss moved)
-        dangers = map hammerHitbox (gsHammers moved)
-               ++ [ broHitbox b  | b <- bros, not (broDead b) ]
-               ++ [ bossHitbox b | Just b <- [boss], bossHealth b > 0, bossInvisible b <= 0 ]
+        dangers = map hitbox (gsHammers moved)
+               ++ [ hitbox b | b <- bros, not (broDead b) ]
+               ++ [ hitbox b | Just b <- [boss], bossHealth b > 0, bossInvisible b <= 0 ]
         players = map (hurtBy dangers) ps3
 
         alive = filter (not . playerDead) players
-        won   = any (\p -> any (overlaps (playerHitbox p) . goalHitbox) (lvlGoals lvl)) alive
+        won   = any (\p -> any (touches p . goalHitbox) (lvlGoals lvl)) alive
              || any ((<= 0) . bossHealth) boss
-             || finishShown gs && any ((>= finishTop) . hbBottom . playerHitbox) alive
+             || finishShown gs && any ((>= finishTop) . hbBottom . hitbox) alive
         status
             | not (null players) && all ((<= 0) . playerHealth) players = Loss
             | won       = Win
@@ -86,7 +86,7 @@ fall dt p = p { playerPos = Vec2 (px + vx * dt) (py + vy' * dt), playerVel = Vec
         vy' = vy - gravity * dt
 
 moveX :: Float -> [Hitbox] -> Player -> Player
-moveX dt solids p = case find (overlaps (playerHitbox p')) solids of
+moveX dt solids p = case find (touches p') solids of
     Nothing  -> p'
     Just box -> p { playerPos = Vec2 (side box) py, playerVel = Vec2 0 vy }
     where
@@ -100,7 +100,7 @@ moveX dt solids p = case find (overlaps (playerHitbox p')) solids of
 
 -- Move up or down
 moveY :: Float -> [Hitbox] -> [Hitbox] -> Player -> Player
-moveY dt solids oneWay p = case (find (overlaps (playerHitbox p')) solids, landOn oneWay p p') of
+moveY dt solids oneWay p = case (find (touches p') solids, landOn oneWay p p') of
     (Just box, _)       -> p { playerPos = Vec2 px (side box), playerVel = Vec2 vx 0, onGround = vy < 0 }
     (Nothing, Just top) -> p { playerPos = Vec2 px (top + playerH p / 2), playerVel = Vec2 vx 0, onGround = True }
     (Nothing, Nothing)  -> p' { onGround = False }
@@ -120,7 +120,7 @@ landOn platforms before after
         [] -> Nothing
         ts -> Just (maximum ts)
     where
-        feet = hbBottom . playerHitbox
+        feet = hbBottom . hitbox
         under h = abs (x (hbCenter h) - x (playerPos after)) < (hbWidth h + playerW after) / 2
 
 -- Velocity computations
@@ -166,18 +166,18 @@ forEach f ps enemies = (ps', enemies', pts)
         one (qs, n) e = let (qs', e', k) = f qs e in ((qs', n + k), e')
 
 firstPlayer :: (Player -> Bool) -> Hitbox -> [Player] -> Maybe Int
-firstPlayer ok box = findIndex (\p -> not (playerDead p) && overlaps (playerHitbox p) box && ok p)
+firstPlayer ok box = findIndex (\p -> not (playerDead p) && touches p box && ok p)
 
 updateAt :: Int -> (Player -> Player) -> [Player] -> [Player]
 updateAt i f ps = [ if j == i then f p else p | (j, p) <- zip [0 ..] ps ]
 
 isStomp :: Player -> Vec2 -> Bool
-isStomp p enemy = y (playerVel p) < 0 && hbBottom (playerHitbox p) > y enemy
+isStomp p enemy = y (playerVel p) < 0 && hbBottom (hitbox p) > y enemy
 
 hitGoomba :: [Player] -> Goomba -> ([Player], Goomba, Int)
 hitGoomba ps gb
     | gState gb /= Walking = (ps, gb, 0)
-    | otherwise = case firstPlayer (const True) (goombaHitbox gb) ps of
+    | otherwise = case firstPlayer (const True) (hitbox gb) ps of
         Nothing -> (ps, gb, 0)
         Just i
             | isStomp (ps !! i) (gPos gb) -> (updateAt i bounce ps, gb { gState = Flat 0.4, gVel = Vec2 0 0 }, 100)
@@ -186,14 +186,14 @@ hitGoomba ps gb
 stompBro :: [Player] -> HammerBro -> ([Player], HammerBro, Int)
 stompBro ps b
     | broDead b = (ps, b, 0)
-    | otherwise = case firstPlayer (`isStomp` broPos b) (broHitbox b) ps of
+    | otherwise = case firstPlayer (`isStomp` broPos b) (hitbox b) ps of
         Nothing -> (ps, b, 0)
         Just i  -> (updateAt i bounce ps, b { broDead = True, broWindup = Nothing, broVel = Vec2 0 300 }, 200)
 
 hitBoss :: [Player] -> Boss -> ([Player], Boss, Int)
 hitBoss ps b
     | bossHealth b <= 0 || bossInvisible b > 0 = (ps, b, 0)
-    | otherwise = case firstPlayer (`isStomp` bossPos b) (bossHitbox b) ps of
+    | otherwise = case firstPlayer (`isStomp` bossPos b) (hitbox b) ps of
         Nothing -> (ps, b, 0)
         Just i  -> (updateAt i bounce ps, hurt, if health <= 0 then 1300 else 300)
     where
@@ -214,7 +214,7 @@ killPlayer p
 
 hurtBy :: [Hitbox] -> Player -> Player
 hurtBy dangers p
-    | not (playerDead p) && any (overlaps (playerHitbox p)) dangers = killPlayer p
+    | not (playerDead p) && any (touches p) dangers = killPlayer p
     | otherwise = p
 
 -- ===================== Random level =====================
@@ -229,7 +229,7 @@ keepBelowRoof gs = gs { gsPlayers = map stop (gsPlayers gs) }
     where
         roof = gsCamY gs + halfH
         stop p
-            | playerDead p || hbTop (playerHitbox p) <= roof = p
+            | playerDead p || hbTop (hitbox p) <= roof = p
             | otherwise = p { playerPos = Vec2 (x (playerPos p)) (roof - playerH p / 2),
                               playerVel = Vec2 (x (playerVel p)) (min 0 (y (playerVel p))) }
 
@@ -256,7 +256,7 @@ fallLimits gs
     | otherwise = (camY - halfH - 60, const topSpot)
     where
         camY = gsCamY gs
-        nearTop = [ h | h <- map staticHitbox (lvlPlatforms (gsLevel gs)), hbTop h < camY + 220, hbTop h > camY - 250 ]
+        nearTop = [ h | h <- map hitbox (lvlPlatforms (gsLevel gs)), hbTop h < camY + 220, hbTop h > camY - 250 ]
         topSpot = case nearTop of
             [] -> Vec2 0 (camY + 200)
             hs -> let h = maximumBy (comparing hbTop) hs in Vec2 (x (hbCenter h)) (hbTop h + 60)
@@ -266,7 +266,7 @@ fallLimits gs
 -- | The switch player n is standing at, if any.
 findSwitch :: Int -> GameState -> Maybe SwitchType
 findSwitch n gs = case drop n (gsPlayers gs) of
-    p : _ | not (playerDead p) -> switchType <$> find (overlaps (playerHitbox p) . switchBox) (lvlSwitches (gsLevel gs))
+    p : _ | not (playerDead p) -> switchType <$> find (touches p . switchBox) (lvlSwitches (gsLevel gs))
     _ -> Nothing
     where
         switchBox s = Hitbox (switchPos s) 48 64

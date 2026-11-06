@@ -61,10 +61,7 @@ startRandom mode app
     | not (checkAvail level) = app { message = Just "The generated level is not available." }
     | otherwise = case mkGameStateMode (playerSelect app) mode level of 
         Left msg -> app { message = Just msg }
-        Right gs -> app {
-            screen = Playing gs,
-            message = Nothing,
-            seed = nextSeed (seed app) }
+        Right gs -> play app gs
     where 
         level = createVert (seed app)
 
@@ -87,13 +84,10 @@ startVert app gs
     | not (checkAvail level) = app { message = Just "The generated level is not available." }
     | otherwise = case mkGameStateMode (gsPlayerSelect gs) (gsMode gs) level of 
         Left msg -> app { message = Just msg }
-        Right new -> app {
-            screen = Playing (keepHealth gs (new { 
+        Right new -> play app (keepHealth gs (new { 
             gsScore = gsScore gs, 
             gsStartScore = gsScore gs, 
-            gsDebug = gsDebug gs})),
-        message = Nothing,
-        seed = nextSeed (seed app) }
+            gsDebug = gsDebug gs}))
     where 
         level = createVert (seed app)
             
@@ -119,9 +113,15 @@ startLevel lid mode  app = do
         Left err -> app { message = Just ("Loading level failed: " ++ show err) }
         Right level -> case mkGameStateMode (playerSelect app) mode level of 
             Left msg -> app { message = Just msg }
-            Right gs -> app {
-                screen = Playing gs,
-                message = Nothing }
+            Right gs -> play app gs
+
+-- Start playing a game. Its random numbers start from the app's seed, which moves on,
+-- so every game (and every random level) is different.
+play :: AppState -> GameState -> AppState
+play app gs = app {
+    screen = Playing gs { gsRng = seed app },
+    message = Nothing,
+    seed = nextSeed (seed app) }
 
 keepHealth :: GameState -> GameState -> GameState
 keepHealth prev new = new {
@@ -135,6 +135,7 @@ restart :: GameState -> GameState
 restart gs = case mkGameStateMode (gsPlayerSelect gs) (gsMode gs) (gsLevel gs) of
     Left _ -> gs
     Right new -> new {
+        gsRng = gsRng gs,
         gsDebug = gsDebug gs,
         gsScore = gsStartScore gs,
         gsStartScore = gsStartScore gs }
@@ -182,7 +183,6 @@ nextStep app = case screen app of
 nextLevel :: LevelId -> Maybe LevelId
 nextLevel Level1 = Just RandomVertical
 nextLevel RandomVertical = Just Level3
-nextLevel Level2 = Just Level3
 nextLevel _ = Nothing 
  
 stepApp :: Float -> AppState -> IO AppState

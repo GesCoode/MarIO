@@ -23,7 +23,7 @@ import GameData (
     hbRight,
     goombaH,
     goombaW,
-    goombaHitbox,
+    HasHitbox (..),
     overlaps,
     playerDead)
 
@@ -110,7 +110,7 @@ moveGoomba dt pltfrms goomba = goomba {
         direction = gDir goomba
         speedY = max (-maxFallSpeed) (y (gVel goomba) - gravity * dt)
         newX = Vec2 (px + direction * goombaSpeed * dt) py
-        hitboxAt point = (goombaHitbox goomba) { hbCenter = point}
+        hitboxAt point = (hitbox goomba) { hbCenter = point}
         hits box = any (overlaps box) pltfrms
         onPltfrm = hits (hitboxAt (Vec2 px (py - 2)))
         feet = Vec2 (x newX + direction * goombaW / 2) (py - goombaH / 2 - 2)

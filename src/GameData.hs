@@ -39,20 +39,18 @@ newtype BroStart = BroStart {
     bsCenter :: Vec2 }
     deriving (Eq)
 
-data LevelId = Sandbox | Level1 | Level2 | Level3 | RandomVertical
+data LevelId = Sandbox | Level1 | Level3 | RandomVertical
   deriving (Eq, Ord, Enum, Bounded, Show, Read)
   
 levelName :: LevelId -> String
 levelName Sandbox = "Sandbox"
 levelName Level1  = "World 1-1"
-levelName Level2  = "Level 2"
 levelName Level3  = "Boss"
 levelName RandomVertical = "Random"
 
 levelPath :: LevelId -> Maybe FilePath
 levelPath Sandbox = Just "Levels/sandbox.json"
 levelPath Level1  = Just "Levels/level1.json"
-levelPath Level2  = Just "Levels/level2.json"
 levelPath Level3  = Just "Levels/level3.json"
 levelPath RandomVertical = Nothing
 
@@ -193,18 +191,6 @@ spawnBoss pos = Boss pos 3 1.5 0 (Vec2 0 0) (y pos) False 0 0
 bossPhase :: Boss -> Int
 bossPhase b = 4 - bossHealth b
 
-goombaHitbox :: Goomba -> Hitbox
-goombaHitbox gb = Hitbox (gPos gb) goombaW goombaH
-
-broHitbox :: HammerBro -> Hitbox
-broHitbox b = Hitbox (broPos b) broW broH
-
-hammerHitbox :: Hammer -> Hitbox
-hammerHitbox h = Hitbox (hamPos h) hammerSize hammerSize
-
-bossHitbox :: Boss -> Hitbox
-bossHitbox boss = Hitbox (bossPos boss) bossW bossH
-
 data GameState = GameState {
     gsLevel        :: Level, 
     gsPlayerSelect :: PlayerSelect,
@@ -314,11 +300,33 @@ mkGameStateMode select mode lvl
         gsRng          = 12345,
         gsDebug        = False})
 
-staticHitbox :: StaticObj -> Hitbox
-staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object)
+class HasHitbox a where
+    hitbox :: a -> Hitbox
 
-playerHitbox :: Player -> Hitbox
-playerHitbox player = Hitbox (playerPos player) (playerW player) (playerH player)
+instance HasHitbox Hitbox where
+    hitbox = id
+
+instance HasHitbox Player where
+    hitbox p = Hitbox (playerPos p) (playerW p) (playerH p)
+
+instance HasHitbox Goomba where
+    hitbox gb = Hitbox (gPos gb) goombaW goombaH
+
+instance HasHitbox HammerBro where
+    hitbox b = Hitbox (broPos b) broW broH
+
+instance HasHitbox Hammer where
+    hitbox h = Hitbox (hamPos h) hammerSize hammerSize
+
+instance HasHitbox Boss where
+    hitbox b = Hitbox (bossPos b) bossW bossH
+
+instance HasHitbox StaticObj where
+    hitbox s = Hitbox (soCenter s) (soWidth s) (soHeight s)
+
+-- Do two things touch?
+touches :: (HasHitbox a, HasHitbox b) => a -> b -> Bool
+touches a b = overlaps (hitbox a) (hitbox b)
 
 -- Edges of a box.
 hbTop, hbBottom, hbLeft, hbRight :: Hitbox -> Float
@@ -328,7 +336,7 @@ hbLeft h   = x (hbCenter h) - hbWidth h / 2
 hbRight h  = x (hbCenter h) + hbWidth h / 2
 
 soTop :: StaticObj -> Float
-soTop = hbTop . staticHitbox
+soTop = hbTop . hitbox
 
 overlaps :: Hitbox -> Hitbox -> Bool
 overlaps a b =

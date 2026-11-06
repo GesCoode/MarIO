@@ -194,7 +194,6 @@ readSwitch input = do
     case goal of 
         "vertical" -> createSwitch ToVertical
         "level1" -> createSwitch (ToHorizontal Level1)
-        "level2" -> createSwitch (ToHorizontal Level2)
         "level3" -> createSwitch (ToHorizontal Level3)
         "end" -> createSwitch ToEnd
-        _ -> Left ("Unknown switch type: " ++ goal ++  ".")
+        _ -> Left ("Unknown switch type: " ++ goal ++  ".")

@@ -43,7 +43,7 @@ readScore = between (token '[') (token ']') $ do
     where 
         names = 
             [(show lvl, lvl) | lvl <- [minBound .. maxBound]] 
-            ++ [ ("Sandbox", Sandbox), ("Level1", Level1), ("Level2", Level2), ("Level3", Level3)]
+            ++ [ ("Sandbox", Sandbox), ("Level1", Level1), ("Level3", Level3)]
 
 list :: ReadP a -> ReadP [a]
 list parser = between (token '[') (token ']') (sepBy parser (token ','))

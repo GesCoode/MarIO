@@ -8,8 +8,8 @@ import GameData(
     PlayerStart (..),
     StaticObj (..),
     levelPath,
-    overlaps,
-    staticHitbox)
+    HasHitbox (..),
+    overlaps)
     
 import LevelParser (parseLevelFile)
 import System.Directory (doesFileExist)
@@ -65,7 +65,7 @@ validateStartpos level
     | any overlapStatic (lvlPlayers level) = Left "Player starts inside static."
     | otherwise = Right () 
     where 
-        staticCell = map staticHitbox (lvlStatics level)
+        staticCell = map hitbox (lvlStatics level)
         overlapStatic start = any (overlaps playerCell) staticCell
             where 
-                playerCell = Hitbox (psCenter start) 32 42
+                playerCell = Hitbox (psCenter start) 32 42
