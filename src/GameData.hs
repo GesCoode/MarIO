@@ -44,10 +44,10 @@ data LevelId = Sandbox | Level1 | Level2 | Level3 | RandomVertical
   
 levelName :: LevelId -> String
 levelName Sandbox = "Sandbox"
-levelName Level1  = "Level 1"
+levelName Level1  = "World 1-1"
 levelName Level2  = "Level 2"
-levelName Level3  = "Level 3"
-levelName RandomVertical = "Random Vertical"
+levelName Level3  = "Boss"
+levelName RandomVertical = "Random"
 
 levelPath :: LevelId -> Maybe FilePath
 levelPath Sandbox = Just "Levels/sandbox.json"
@@ -83,7 +83,8 @@ data Level = Level {
     lvlBros     :: [BroStart],
     lvlGoals    :: [Vec2],
     lvlBosses   :: [Vec2],
-    lvlSwitches :: [Switch]}
+    lvlSwitches :: [Switch],
+    lvlPlatforms :: [StaticObj]}   -- one-way: jump through from below, stand on top
     deriving (Eq)
 
 -- Controls for player
@@ -155,7 +156,12 @@ data Boss = Boss {
     bossHealth :: Int,
     bossPhase :: Int,
     bossCooldown :: Float,
-    bossInvisible :: Float}
+    bossInvisible :: Float,
+    bossVel :: Vec2,      -- only used while jumping
+    bossHomeY :: Float,   -- floor height he lands back on
+    bossJumping :: Bool,
+    bossVolleys :: Int,   -- phase 3: hammer pairs thrown in the current burst
+    bossAnim :: Float}    -- time, drives the BT0/BT1 animation
     deriving (Eq)
     
 goombaW, goombaH :: Float
@@ -168,8 +174,8 @@ broH       = 60
 hammerSize = 20   -- sprite is 16x16 drawn at 2x; hitbox smaller
 
 bossW, bossH :: Float
-bossW = 50 -- Pas aan adhv image pls
-bossH = 50 -- Pas aan adhv image pls
+bossW = 42 -- sprites are 16x24, drawn at 3x (48x72); hitbox a bit narrower
+bossH = 72
 
 spawnGoomba :: GoombaStart -> Goomba
 spawnGoomba s = Goomba (gsCenter s) (Vec2 0 0) direction Walking 0
@@ -180,7 +186,7 @@ spawnBro :: BroStart -> HammerBro
 spawnBro s = HammerBro (bsCenter s) 0 Nothing 0 False (Vec2 0 0)
 
 spawnBoss :: Vec2 -> Boss
-spawnBoss pos = Boss pos 3 1 1.5 0 
+spawnBoss pos = Boss pos 3 1 1.5 0 (Vec2 0 0) (y pos) False 0 0
 
 goombaHitbox :: Goomba -> Hitbox
 goombaHitbox gb = Hitbox (gPos gb) goombaW goombaH
@@ -204,8 +210,12 @@ data GameState = GameState {
     gsBros         :: [HammerBro],
     gsHammers      :: [Hammer],
     gsBoss         :: Maybe Boss,
-    gsScore        :: Int,
+    gsScore        :: Int,        -- starts at startScore, -1 every second, + points for kills
     gsStartScore   :: Int,
+    gsClock        :: Float,      -- time since the score last ticked down
+    gsCamY         :: Float,      -- camera height (only moves in the Random level)
+    gsRise         :: Maybe Float,  -- Random level: seconds the camera has been rising
+    gsFinishY      :: Maybe Float,  -- Random level: top of the finish platform, once it is there
     gsPaused       :: Bool,
     gsRng          :: Int,        -- seed for random death arcs
     gsDebug        :: Bool}
@@ -240,7 +250,7 @@ defaultPlayer = Player {
     onGround  = False,
     playerIn  = noInput,
     playerDead  = False, 
-    playerHealth = 3,
+    playerHealth = maxHealth,
     playerSpawn = Vec2 0 0,
     facingRight = True,
     walkPhase   = 0}
@@ -253,6 +263,21 @@ spawnPlayer ps = defaultPlayer {
 
 mkGameState :: PlayerSelect -> Level ->  Either String GameState
 mkGameState select = mkGameStateMode select LevelSelect
+
+-- | Random level: once a player jumps, the camera rises at riseSpeed for riseDuration
+--   seconds. Then a full-width finish platform appears with its top at finishTop.
+riseSpeed, riseDuration, finishTop :: Float
+riseSpeed    = 50
+riseDuration = 60
+finishTop    = riseSpeed * riseDuration + 200
+
+-- | Hearts each player starts with.
+maxHealth :: Int
+maxHealth = 3
+
+-- | The score is also the timer: it starts here and drops by 1 every second.
+startScore :: Int
+startScore = 300
 
 mkGameStateMode :: PlayerSelect -> GameMode -> Level ->  Either String GameState
 mkGameStateMode select mode lvl
@@ -269,8 +294,12 @@ mkGameStateMode select mode lvl
         gsBoss         = case lvlBosses lvl of
             [] -> Nothing
             pos : _ -> Just (spawnBoss pos),
-        gsScore        = 0,
-        gsStartScore   = 0,
+        gsScore        = startScore,
+        gsStartScore   = startScore,
+        gsClock        = 0,
+        gsCamY         = 0,
+        gsRise         = Nothing,
+        gsFinishY      = Nothing,
         gsPaused       = False,
         gsRng          = 12345,
         gsDebug        = False})

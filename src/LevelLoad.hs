@@ -23,7 +23,8 @@ createLevel lid ids = Level {
     lvlBros = lfBros ids,
     lvlGoals = lfGoals ids,
     lvlBosses = lfBosses ids,
-    lvlSwitches = lfSwitches ids}
+    lvlSwitches = lfSwitches ids,
+    lvlPlatforms = []}
 
 -- | Read Level; parsing continues. 
 loadLevel :: LevelId -> IO Level

@@ -17,6 +17,7 @@ import GameData (
     Hammer (..),
     Hitbox (..),
     Boss (..),
+    bossW,
     goombaH,
     goombaW,
     goombaHitbox,
@@ -62,7 +63,7 @@ stepEnemies dt pltfrms gs = gs {
         (newBoss, bossHammers) = case gsBoss gs of
             Nothing -> (Nothing, [])
             Just boss -> 
-                let (boss', hammers) = stepBoss dt players boss
+                let (boss', hammers) = stepBoss dt pltfrms players boss
                 in (Just boss', hammers) 
 
 -- Niet heel netjes want gecopied uit Procedural
@@ -183,24 +184,66 @@ stepBro dt players bro
         maybeThrow (Just target) = [throwAt hand target]
 
 -- | Second boss has shorter interval and two hammers
-stepBoss :: Float -> [Player] -> Boss -> (Boss, [Hammer])
-stepBoss dt players boss 
+-- Boss timings (seconds) and jump
+bossThrowGap, bossJumpGap, bossVolleyGap, bossRest, bossAirTime :: Float
+bossThrowGap  = 1.8   -- phase 1: one hammer every 1.8 s
+bossJumpGap   = 3.0   -- phase 2: a jump every 3 s
+bossVolleyGap = 0.35  -- phase 3: time between the pairs of hammers
+bossRest      = 1.5   -- phase 3: rest after landing, before the next burst
+bossAirTime   = 1.6   -- a jump takes 1.6 s: high and slow, so the player can react
+
+-- | Phase 1 (3 health): throws single hammers.
+--   Phase 2 (2 health): only jumps at the player.
+--   Phase 3 (1 health): 3 quick pairs of hammers, then jumps at the player, rests, repeats.
+stepBoss :: Float -> [Hitbox] -> [Player] -> Boss -> (Boss, [Hammer])
+stepBoss dt pltfrms players boss 
     | bossHealth boss <= 0 = (boss, [])
-    | bossCooldown boss > dt = (cooldown, [])
+    | bossJumping boss = (fly ticked, [])
+    | bossCooldown ticked > 0 = (ticked, [])
     | otherwise = case nearestPlayer (bossPos boss) players of
-        Nothing -> (cooldown { bossCooldown = 0.4 }, [])
-        Just target -> ( 
-            cooldown { bossCooldown = interval },
-            map (`throwAt` target) targetpoints )
+        Nothing -> (ticked { bossCooldown = 0.4 }, [])
+        Just target -> case bossPhase boss of
+            1 -> (ticked { bossCooldown = bossThrowGap }, [throwAt hand target])
+            2 -> (jumpAt target ticked, [])
+            _ | bossVolleys boss < 2 ->
+                    ( ticked { bossCooldown = bossVolleyGap, bossVolleys = bossVolleys boss + 1 }
+                    , pair target )
+              | otherwise ->   -- third pair: throw it and jump straight after
+                    ( jumpAt target ticked { bossVolleys = 0 }, pair target )
     where 
-        cooldown = boss {
+        ticked = boss {
+            bossAnim = bossAnim boss + dt,
             bossCooldown = max 0 (bossCooldown boss - dt),
             bossInvisible = max 0 (bossInvisible boss - dt) }
-        interval = if bossPhase boss == 1 then 1.8 else 0.9
         Vec2 bx by = bossPos boss
-        targetpoints = if bossPhase boss == 1
-            then [Vec2 bx (by + 35)]
-            else [Vec2 (bx - 20) (by + 35), Vec2 (bx + 20) (by + 35)]
+        hand = Vec2 bx (by + 35)
+        -- two hammers at once, landing just in front of and just behind the player
+        pair (Vec2 tx ty) = [throwAt hand (Vec2 (tx - 40) ty), throwAt hand (Vec2 (tx + 40) ty)]
+
+        -- big parabola that comes down on the target's x, at his own floor height
+        jumpAt (Vec2 tx _) b = b {
+            bossJumping = True,
+            bossVel = Vec2 ((landX tx - bx) / bossAirTime) (0.5 * gravity * bossAirTime) }
+
+        -- never land past the edge of the floor (e.g. when the player is mid-air over the gap)
+        landX tx
+            | null pltfrms = tx
+            | otherwise    = max (left + bossW / 2) (min (right - bossW / 2) tx)
+        left  = minimum [x (hbCenter h) - hbWidth h / 2 | h <- pltfrms]
+        right = maximum [x (hbCenter h) + hbWidth h / 2 | h <- pltfrms]
+
+        fly b =
+            let Vec2 px py = bossPos b
+                Vec2 vx vy = bossVel b
+                vy' = vy - gravity * dt
+                ny  = py + vy' * dt
+            in if vy' < 0 && ny <= bossHomeY b
+                then b {   -- landed
+                    bossPos = Vec2 (px + vx * dt) (bossHomeY b),
+                    bossVel = Vec2 0 0,
+                    bossJumping = False,
+                    bossCooldown = if bossPhase b == 2 then bossJumpGap else bossRest }
+                else b { bossPos = Vec2 (px + vx * dt) ny, bossVel = Vec2 vx vy' }
 
 stepHammer :: Float -> Hammer -> Hammer
 stepHammer dt hammer = hammer { 

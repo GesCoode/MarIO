@@ -27,7 +27,6 @@ handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
                 Nothing  -> pure app
                 Just (SelectLevel level) -> startLevel level LevelSelect app
                 Just StartCampaign -> startLevel Level1 Campaign app
-                Just StartRandom -> pure (startRandom app)
         Playing _ -> pure app
 
 -- | First player activates with E and second with Enter
@@ -53,18 +52,21 @@ handleEvent (EventKey key keyState _ _) app =
     pure (mapPlaying app (applyKey key (keyState == Down)))
 handleEvent _ app = pure app
 
--- | Load Random Level 
-startRandom :: AppState -> AppState
-startRandom app
+-- | Generate and start a random level. In the campaign its exit leads to the boss.
+startRandom :: GameMode -> AppState -> AppState
+startRandom mode app
     | not (checkAvail level) = app { message = Just "The generated level is not available." }
-    | otherwise = case mkGameStateMode (playerSelect app) LevelSelect level of 
+    | otherwise = case mkGameStateMode (playerSelect app) mode level of 
         Left msg -> app { message = Just msg }
         Right gs -> app {
             screen = Playing gs,
             message = Nothing,
             seed = nextSeed (seed app) }
     where 
-        level = createVert (seed app) ToEnd
+        level = createVert (seed app) exit
+        exit = case mode of
+            Campaign    -> ToHorizontal Level3
+            LevelSelect -> ToEnd
 
 -- | Switch between horizontal and vertical 
 activateSwitch :: Int -> AppState -> IO AppState
@@ -125,6 +127,7 @@ contCampaign lid app prev = do
         (_, Menu) -> pure res 
             
 startLevel :: LevelId -> GameMode -> AppState -> IO AppState
+startLevel RandomVertical mode app = pure (startRandom mode app)   -- generated, no file
 startLevel lid mode  app = do
     res <- try (loadLevel lid) :: IO (Either IOException Level)
     pure $ case res of 
@@ -193,11 +196,13 @@ nextStep app = case screen app of
 nLevel :: LevelId -> Int
 nLevel Level1 = 1 
 nLevel Level2 = 2 
+nLevel RandomVertical = 2
 nLevel Level3 = 3 
 nLevel _ = 1 
 
 nextLevel :: LevelId -> Maybe LevelId
-nextLevel Level1 = Just Level2
+nextLevel Level1 = Just RandomVertical
+nextLevel RandomVertical = Just Level3
 nextLevel Level2 = Just Level3
 nextLevel _ = Nothing 
  
@@ -236,4 +241,5 @@ saveWin app gs
 nextUnlocked :: LevelId -> Int
 nextUnlocked Level1 = 2 
 nextUnlocked Level2 = 3
+nextUnlocked RandomVertical = 3
 nextUnlocked _ = 1 

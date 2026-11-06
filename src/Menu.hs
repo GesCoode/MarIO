@@ -14,7 +14,7 @@ module Menu (
 import Data.Maybe (listToMaybe)
 import GameData (LevelId (..), PlayerSelect (..))
 
-data MenuSelect = SelectLevel LevelId | StartCampaign | StartRandom
+data MenuSelect = SelectLevel LevelId | StartCampaign
     deriving (Eq)
     
 menuW, menuH :: Float
@@ -25,10 +25,9 @@ menuButtons :: [(MenuSelect, Float)]
 menuButtons = [
     (SelectLevel Sandbox, 185),
     (SelectLevel Level1, 125),
-    (SelectLevel Level2, 65),
+    (SelectLevel RandomVertical, 65),
     (SelectLevel Level3, 5),
-    (StartCampaign, -55),
-    (StartRandom, -115)]
+    (StartCampaign, -55)]
 
 playerBtnW, playerBtnH, playerBtnY :: Float
 playerBtnW = 185

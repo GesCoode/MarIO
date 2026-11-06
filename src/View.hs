@@ -26,6 +26,7 @@ import GameData (AppState (..),  Boss (..),
     goombaHitbox, 
     hammerHitbox, 
     levelName, 
+    maxHealth,
     playerHitbox)
 
 import Physics (goalHitbox)
@@ -84,15 +85,19 @@ drawPlaying atlas gs =
     pictures [ 
         color black (rectangleSolid 800 600),
         -- everything in the world moves with the camera; the label stays put
-        translate (negate (cameraX gs)) 0 $ pictures [
+        translate (negate (cameraX gs)) (negate (gsCamY gs)) $ pictures [
             pictures (map (drawStatic atlas (gsDebug gs)) (lvlStatics (gsLevel gs))),
+            pictures (map (drawStatic atlas (gsDebug gs)) (lvlPlatforms (gsLevel gs))),
             pictures (map (drawGoomba atlas (gsDebug gs)) (gsGoombas gs)),
             pictures (map (drawBro atlas (gsDebug gs)) (gsBros gs)),
             pictures (map (drawHammer atlas (gsDebug gs)) (gsHammers gs)),
+            maybe blank (drawBoss atlas (gsDebug gs) (gsPlayers gs)) (gsBoss gs),
             pictures (zipWith (drawPlayer atlas (gsDebug gs)) playerChars (gsPlayers gs)),
             -- goals are invisible, except as green outlines in the debug view
             if gsDebug gs then pictures (map (drawFinish . goalHitbox) (lvlGoals (gsLevel gs))) else blank],
-        cornerLabel (levelName (lvlId (gsLevel gs)))]
+        cornerLabel (levelName (lvlId (gsLevel gs))),
+        scoreLabel (gsScore gs),
+        pictures (zipWith3 (healthRow atlas) [0 ..] ["MARIO", "LUIGI"] (gsPlayers gs))]
 
 drawFinish :: Hitbox -> Picture
 drawFinish hb =
@@ -126,19 +131,24 @@ drawStatic atlas debug s =
     where
         c = soCenter s
         body = case lookup (soSprite s) atlas of
-            Just pic -> tiled (soWidth s) (soHeight s) pic
+            Just pic -> tiled (textureSize (soSprite s)) (soWidth s) (soHeight s) pic
             Nothing  -> color white $ rectangleSolid (soWidth s) (soHeight s)
 
--- Repeat a 16x16 texture (drawn at 2x, so 32x32) across a w x h block.
--- Tiles stretch slightly when the size is not a multiple of 32.
-tiled :: Float -> Float -> Picture -> Picture
-tiled w h pic = pictures
+-- | Pixel size of a level texture: most are 16x16, the one-way platform is 16x8.
+textureSize :: String -> (Float, Float)
+textureSize "Platform" = (16, 8)
+textureSize _          = (16, 16)
+
+-- Repeat a texture (drawn at 2x) across a w x h block.
+-- Tiles stretch slightly when the size is not a multiple of the tile size.
+tiled :: (Float, Float) -> Float -> Float -> Picture -> Picture
+tiled (texW, texH) w h pic = pictures
   [ translate (-w / 2 + tw * (fromIntegral i + 0.5)) (-h / 2 + th * (fromIntegral j + 0.5)) $
-      scale (tw / 16) (th / 16) pic
+      scale (tw / texW) (th / texH) pic
   | i <- [0 .. nx - 1], j <- [0 .. ny - 1] ]
   where
-    nx = max 1 (round (w / 32)) :: Int
-    ny = max 1 (round (h / 32)) :: Int
+    nx = max 1 (round (w / (2 * texW))) :: Int
+    ny = max 1 (round (h / (2 * texH))) :: Int
     tw = w / fromIntegral nx
     th = h / fromIntegral ny
 
@@ -204,6 +214,34 @@ drawBro atlas debug b
         flipY = if broDead b then -1 else 1
 
 -- Spins through H0..H6 at 14 frames per second.
+-- | Boss sprites (16x24, drawn at 3x):
+--   BT0/BT1 alternate while he is about to throw or jump, and while jumping;
+--   BTN when standing still or hurt (flickering after a stomp).
+--   The sprites face left; he is flipped to face the nearest living player.
+drawBoss :: SpriteAtlas -> Bool -> [Player] -> Boss -> Picture
+drawBoss atlas debug players b
+    | bossHealth b <= 0 = blank
+    | flicker           = blank
+    | debug     = translate (x c) (y c) $ color silverWire $ rectangleWire (hbWidth hb) (hbHeight hb)
+    | otherwise = translate (x c) (y c) $ case lookup sprite atlas of
+        Just pic -> scale (3 * facing) 3 pic
+        Nothing  -> color (makeColor 0.8 0.1 0.1 1.0) $ rectangleSolid (hbWidth hb) (hbHeight hb)
+    where
+        c  = bossPos b
+        hb = bossHitbox b
+        hurt    = bossInvisible b > 0
+        flicker = hurt && even (floor (bossInvisible b * 10) :: Int)
+        busy    = bossJumping b || bossCooldown b < 0.4   -- jumping, or about to act
+        sprite
+            | hurt      = "BTN"
+            | busy      = "BT" ++ show ((floor (bossAnim b * 8) :: Int) `mod` 2)
+            | otherwise = "BTN"
+        alive   = [x (playerPos p) | p <- players, not (playerDead p)]
+        nearest = case alive of
+            [] -> x c
+            ps -> snd (minimum [(abs (px - x c), px) | px <- ps])
+        facing  = if nearest > x c then -1 else 1
+
 drawHammer :: SpriteAtlas -> Bool -> Hammer -> Picture
 drawHammer atlas debug h =
     translate (x c) (y c) $
@@ -226,11 +264,28 @@ drawButton (choice, cy) =
 buttonLabel :: MenuSelect -> String
 buttonLabel (SelectLevel lid) = levelName lid
 buttonLabel StartCampaign     = "Campaign"
-buttonLabel StartRandom       = "Random Level"
 
 buttonColor :: MenuSelect -> Color
 buttonColor (SelectLevel Sandbox) = yellowButton
 buttonColor _                     = grayButton
+
+-- | Score (which is also the timer), top right.
+-- | One row of hearts per player under the level name: full hearts for the health
+--   left, empty ones for what is lost. Hearts are 15x13, drawn at 2x.
+healthRow :: SpriteAtlas -> Int -> String -> Player -> Picture
+healthRow atlas row name p =
+    translate (-380) (232 - 34 * fromIntegral row) $ pictures (label : hearts)
+    where
+        label = translate 0 (-5) $ scale 0.1 0.1 $ color white $ text name
+        hearts = [ translate (85 + 34 * fromIntegral i) 0 (heart (i < playerHealth p))
+                 | i <- [0 .. maxHealth - 1] ]
+        heart full = case lookup (if full then "FullHeart" else "EmptyHeart") atlas of
+            Just pic -> scale 2 2 pic
+            Nothing  -> color (if full then red else greyN 0.4) $ circleSolid 12
+
+scoreLabel :: Int -> Picture
+scoreLabel score =
+    translate 230 270 $ scale 0.15 0.15 $ color white $ text ("SCORE " ++ show score)
 
 cornerLabel :: String -> Picture
 cornerLabel label =
