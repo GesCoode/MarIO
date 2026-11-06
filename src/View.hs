@@ -35,13 +35,41 @@ drawPlaying :: SpriteAtlas -> GameState -> Picture
 drawPlaying atlas gs =
   pictures
     [ color black (rectangleSolid 800 600)
-    , pictures (map (drawStatic atlas (gsDebug gs)) (lvlStatics (gsLevel gs)))
-    , pictures (map (drawGoomba atlas (gsDebug gs)) (gsGoombas gs))
-    , pictures (map (drawBro atlas (gsDebug gs)) (gsBros gs))
-    , pictures (map (drawHammer atlas (gsDebug gs)) (gsHammers gs))
-    , pictures (zipWith (drawPlayer atlas (gsDebug gs)) playerChars (gsPlayers gs))
+    -- everything in the world moves with the camera; the label stays put
+    , translate (negate (cameraX gs)) 0 $ pictures
+        [ pictures (map (drawStatic atlas (gsDebug gs)) (lvlStatics (gsLevel gs)))
+        , pictures (map (drawGoomba atlas (gsDebug gs)) (gsGoombas gs))
+        , pictures (map (drawBro atlas (gsDebug gs)) (gsBros gs))
+        , pictures (map (drawHammer atlas (gsDebug gs)) (gsHammers gs))
+        , pictures (zipWith (drawPlayer atlas (gsDebug gs)) playerChars (gsPlayers gs))
+          -- finish boxes are invisible, except as green outlines in the debug view
+        , if gsDebug gs then pictures (map drawFinish (lvlFinish (gsLevel gs))) else blank
+        ]
     , cornerLabel (levelName (lvlId (gsLevel gs)))
     ]
+
+drawFinish :: Hitbox -> Picture
+drawFinish hb =
+  translate (x (hbCenter hb)) (y (hbCenter hb)) $
+    color green $ rectangleWire (hbWidth hb) (hbHeight hb)
+
+-- | Camera x: midpoint between the living players (all players if none are alive),
+--   kept inside the level so the screen never shows past its left or right edge.
+cameraX :: GameState -> Float
+cameraX gs = clamp (midpoint (map (x . playerPos) followed))
+  where
+    alive    = filter (not . playerDead) (gsPlayers gs)
+    followed = if null alive then gsPlayers gs else alive
+    midpoint [] = 0
+    midpoint xs = (minimum xs + maximum xs) / 2
+
+    statics = lvlStatics (gsLevel gs)
+    left    = minimum [x (soCenter s) - soWidth s / 2 | s <- statics] + 400
+    right   = maximum [x (soCenter s) + soWidth s / 2 | s <- statics] - 400
+    clamp c
+      | null statics  = c
+      | right < left  = (left + right) / 2   -- level narrower than the screen
+      | otherwise     = max left (min right c)
 
 drawStatic :: SpriteAtlas -> Bool -> StaticObj -> Picture
 drawStatic atlas debug s =
@@ -52,8 +80,21 @@ drawStatic atlas debug s =
   where
     c = soCenter s
     body = case lookup (soSprite s) atlas of
-      Just pic -> pic
+      Just pic -> tiled (soWidth s) (soHeight s) pic
       Nothing  -> color white $ rectangleSolid (soWidth s) (soHeight s)
+
+-- Repeat a 16x16 texture (drawn at 2x, so 32x32) across a w x h block.
+-- Tiles stretch slightly when the size is not a multiple of 32.
+tiled :: Float -> Float -> Picture -> Picture
+tiled w h pic = pictures
+  [ translate (-w / 2 + tw * (fromIntegral i + 0.5)) (-h / 2 + th * (fromIntegral j + 0.5)) $
+      scale (tw / 16) (th / 16) pic
+  | i <- [0 .. nx - 1], j <- [0 .. ny - 1] ]
+  where
+    nx = max 1 (round (w / 32)) :: Int
+    ny = max 1 (round (h / 32)) :: Int
+    tw = w / fromIntegral nx
+    th = h / fromIntegral ny
 
 -- Player 0 is Mario, player 1 is Luigi (sprite name prefix).
 playerChars :: [Char]

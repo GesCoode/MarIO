@@ -59,7 +59,8 @@ data LevelFile = LevelFile {
     lfStatics :: [StaticObj], 
     lfPlayers :: [PlayerStart],
     lfGoombas :: [GoombaStart],
-    lfBros    :: [BroStart]}
+    lfBros    :: [BroStart],
+    lfFinish  :: [Hitbox]}
     deriving (Eq)
 
 data Level = Level { 
@@ -67,7 +68,8 @@ data Level = Level {
     lvlStatics :: [StaticObj], 
     lvlPlayers :: [PlayerStart],
     lvlGoombas :: [GoombaStart],
-    lvlBros    :: [BroStart]}
+    lvlBros    :: [BroStart],
+    lvlFinish  :: [Hitbox]}   -- invisible boxes: touching one ends the level
     deriving (Eq)
 
 data Player = Player { 
@@ -181,7 +183,7 @@ mkGameState lvl = GameState
     , gsBros         = map spawnBro (lvlBros lvl)
     , gsHammers      = []
     , gsRng          = 12345
-    , gsDebug        = True
+    , gsDebug        = False
     }
   where
     starts   = map spawnPlayer (lvlPlayers lvl)

@@ -5,6 +5,7 @@ import Data.Char (isDigit, isSpace)
 import GameData
   ( BroStart (..)
   , GoombaStart (..)
+  , Hitbox (..)
   , LevelFile (..)
   , PlayerStart (..)
   , StaticObj (..)
@@ -30,14 +31,30 @@ levelFile s0 = do
   (goombas, s5) <- optionalList goombaStart s4
   -- optional fourth list: hammer bros
   (bros, s6) <- optionalList broStart s5
-  ((), s7) <- expect ']' (skipSpace s6)
-  Right (LevelFile statics players goombas bros, s7)
+  -- optional fifth list: finish boxes
+  (finish, s7) <- optionalList finishBox s6
+  ((), s8) <- expect ']' (skipSpace s7)
+  Right (LevelFile statics players goombas bros finish, s8)
 
 -- | @, [ ... ]@ if present, otherwise an empty list.
 optionalList :: Parser a -> Parser [a]
 optionalList item s0 = case skipSpace s0 of
   ',' : s -> listOf item (skipSpace s)
   s       -> Right ([], s)
+
+-- | Finish box: @[cx, cy, w, h]@ (center, width, height).
+finishBox :: Parser Hitbox
+finishBox s0 = do
+  ((), s1) <- expect '[' s0
+  (cx, s2) <- number (skipSpace s1)
+  ((), s3) <- expect ',' (skipSpace s2)
+  (cy, s4) <- number (skipSpace s3)
+  ((), s5) <- expect ',' (skipSpace s4)
+  (w, s6) <- number (skipSpace s5)
+  ((), s7) <- expect ',' (skipSpace s6)
+  (h, s8) <- number (skipSpace s7)
+  ((), s9) <- expect ']' (skipSpace s8)
+  Right (Hitbox (Vec2 cx cy) w h, s9)
 
 -- | Hammer Bro: @[cx, cy]@.
 broStart :: Parser BroStart

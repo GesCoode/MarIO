@@ -21,6 +21,8 @@ import GameData
   , Screen (..)
   , initialApp
   , mkGameState
+  , overlaps
+  , playerHitbox
   )
 import LevelLoad (loadLevel)
 import Menu (hitTest)
@@ -83,4 +85,16 @@ applyKey key pressed gs = case key of
       | otherwise       = pl
 
 stepApp :: Float -> AppState -> IO AppState
-stepApp dt app = pure $ mapPlaying app (stepWorld dt)
+stepApp dt app = pure $ case screen app of
+  Playing gs
+    | reachedFinish gs' -> initialApp (sprites app)   -- level done: back to the menu
+    | otherwise         -> app { screen = Playing gs' }
+    where gs' = stepWorld dt gs
+  Menu -> app
+
+-- | A living player is inside one of the level's finish boxes.
+reachedFinish :: GameState -> Bool
+reachedFinish gs = or
+  [ overlaps (playerHitbox p) box
+  | p <- gsPlayers gs, not (playerDead p)
+  , box <- lvlFinish (gsLevel gs) ]

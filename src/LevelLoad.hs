@@ -16,13 +16,14 @@ loadLevel lid = do
   case parseLevelFile (stripBom raw) of
     Left err ->
       ioError (userError ("Failed to load " ++ path ++ ": " ++ err))
-    Right (LevelFile sts pls gbs bros) ->
+    Right (LevelFile sts pls gbs bros fin) ->
       pure Level
         { lvlId      = lid
         , lvlStatics = sts
         , lvlPlayers = pls
         , lvlGoombas = gbs
         , lvlBros    = bros
+        , lvlFinish  = fin
         }
 
 -- | UTF-8 BOM that Windows editors often prepend.

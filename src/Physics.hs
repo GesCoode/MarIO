@@ -30,7 +30,7 @@ import GameData
 -- | One frame: players, goombas, then player/goomba contact.
 stepWorld :: Float -> GameState -> GameState
 stepWorld dt gs =
-  gs { gsPlayers = ps3, gsGoombas = filter onScreen gbs2, gsRng = rng1
+  gs { gsPlayers = respawnAll ps3, gsGoombas = filter onScreen gbs2, gsRng = rng1
      , gsBros = filter broOnScreen bros2, gsHammers = filter hammerOnScreen (hams1 ++ thrown) }
   where
     solids = map staticHitbox (lvlStatics (gsLevel gs))
@@ -64,10 +64,11 @@ stepPlayer dt solids pl0
           pl1 = pl { playerPos = Vec2 (px + vx * dt) (py + vy' * dt), playerVel = Vec2 vx vy' }
       in respawnIfFallen pl1
 
+    -- below the screen: out of the game (dead, parked) until everyone is out
     respawnIfFallen pl
-      | y (playerPos pl) < killY = defaultPlayer { playerPos = playerSpawn pl
-                                                 , playerSpawn = playerSpawn pl
-                                                 , playerIn = playerIn pl }
+      | y (playerPos pl) < killY = pl { playerDead = True
+                                      , playerPos = Vec2 (x (playerPos pl)) (killY - 1)
+                                      , playerVel = Vec2 0 0 }
       | otherwise = pl
 
     moveX pl =
@@ -90,7 +91,7 @@ accel = 1500
 maxSpeed = 300
 gravity = 1200
 friction = 1800
-jumpSpeed = 550
+jumpSpeed = 627   -- 550 * sqrt 1.3: jump height grows with speed squared, so this gives 1.3x the height
 maxFallSpeed = 800
 
 updateVel :: Float -> InputHandler -> Player -> Player
@@ -282,8 +283,20 @@ stepHammer dt h = h { hamPos = Vec2 (px + vx * dt) (py + vy' * dt), hamVel = Vec
     Vec2 vx vy = hamVel h
     vy' = vy - gravity * dt
 
+-- | Respawn only once every player is dead and has fallen off the screen.
+--   Then all of them come back at their spawn points (held keys are kept).
+respawnAll :: [Player] -> [Player]
+respawnAll ps
+  | not (null ps) && all gone ps = map respawn ps
+  | otherwise                    = ps
+  where
+    gone p    = playerDead p && y (playerPos p) < killY
+    respawn p = defaultPlayer { playerPos = playerSpawn p
+                              , playerSpawn = playerSpawn p
+                              , playerIn = playerIn p }
+
 hammerOnScreen :: Hammer -> Bool
-hammerOnScreen h = y (hamPos h) > killY && abs (x (hamPos h)) < 600
+hammerOnScreen h = y (hamPos h) > killY
 
 broOnScreen :: HammerBro -> Bool
 broOnScreen b = not (broDead b && y (broPos b) < killY)
