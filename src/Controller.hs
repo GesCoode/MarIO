@@ -1,100 +1,232 @@
-module Controller
-  ( handleEvent
-  , stepApp
-  ) where
+module Controller (handleEvent, stepApp, activateSwitch) where
 
-import Graphics.Gloss.Interface.IO.Game
-  ( Event (..)
-  , Key (..)
-  , KeyState (..)
-  , MouseButton (..)
-  , SpecialKey (..)
-  )
+import Control.Exception (IOException, try)
+import Data.Char (toLower)
+import Data.List (sortBy)
+import Data.Ord (comparing)
+import Graphics.Gloss.Interface.IO.Game 
+    (Event (..), Key (..), KeyState (..), MouseButton (..), SpecialKey (..))
 
-import GameData
-  ( AppState (..)
-  , GameState (..)
-  , InputHandler (..)
-  , Level (..)
-  , Player (..)
-  , LevelId (..)
-  , Screen (..)
-  , initialApp
-  , mkGameState
-  , overlaps
-  , playerHitbox
-  )
+import GameData 
+    (AppState (..), GameMode(..), GameState (..), GameStatus (..), Highscore (..), 
+    InputHandler (..), Level (..), LevelId (..), Player (..), Screen (..), 
+    SwitchType (..), mkGameStateMode)
+    
 import LevelLoad (loadLevel)
-import Menu (hitTest)
-import Physics (stepWorld)
+import Menu (MenuSelect (..), hitTest, hitTestPlayers)
+import Persistence (saveScores, saveProgress)
+import Physics (stepWorld, findSwitch)
+import Procedural (createVert, nextSeed, checkAvail)
 
 handleEvent :: Event -> AppState -> IO AppState
 handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
-  case screen app of
-    Menu -> case hitTest mouse of
-      Nothing  -> pure app
-      Just lid -> do
-        lvl <- loadLevel lid
-        pure app { screen = Playing (mkGameState lvl) }
-    Playing _ -> pure app
+    case screen app of
+        Menu -> case hitTestPlayers mouse of
+            Just select -> pure app { playerSelect = select }
+            Nothing -> case hitTest mouse of 
+                Nothing  -> pure app
+                Just (SelectLevel level) -> startLevel level LevelSelect app
+                Just StartCampaign -> startLevel Level1 Campaign app
+                Just StartRandom -> pure (startRandom app)
+        Playing _ -> pure app
+
+-- | First player activates with E and second with Enter
+handleEvent (EventKey (Char c) Down _ _) app
+    | toLower c == 'e' = activateSwitch 0 app
+handleEvent (EventKey (SpecialKey KeyEnter) Down _ _) app = 
+    activateSwitch 1 app
 
 handleEvent (EventKey (SpecialKey KeyEsc) Down _ _) app =
-  case screen app of
-    Playing _ -> pure (initialApp (sprites app))
-    Menu      -> pure app
+    pure app { screen = Menu, message = Nothing }
 
--- 'c' toggles wireframe view (no textures).
-handleEvent (EventKey (Char 'c') Down _ _) app =
-  pure $ mapPlaying app $ \gs -> gs { gsDebug = not (gsDebug gs) }
-
--- 'r' resets the sandbox (keeps debug setting).
-handleEvent (EventKey (Char 'r') Down _ _) app =
-  pure $ mapPlaying app resetSandbox
-
+-- | Pause, toggle, restart, nexy
+handleEvent (EventKey (Char c) Down _ _) app
+    | toLower c == 'p' = 
+        pure (mapPlaying app (\gs -> gs { gsPaused = not (gsPaused gs) }))
+    | toLower c == 'c' = 
+        pure (mapPlaying app (\gs -> gs { gsDebug = not (gsDebug gs) }))
+    | toLower c == 'r' = pure (mapPlaying app restart)
+    | toLower c == 'n' = nextStep app
+        
+-- | Process pressing and letting go of movement keys 
 handleEvent (EventKey key keyState _ _) app =
-  case keyState of
-    Down -> pure $ mapPlaying app (applyKey key True)
-    Up   -> pure $ mapPlaying app (applyKey key False)
-
+    pure (mapPlaying app (applyKey key (keyState == Down)))
 handleEvent _ app = pure app
 
+-- | Load Random Level 
+startRandom :: AppState -> AppState
+startRandom app
+    | not (checkAvail level) = app { message = Just "The generated level is not available." }
+    | otherwise = case mkGameStateMode (playerSelect app) LevelSelect level of 
+        Left msg -> app { message = Just msg }
+        Right gs -> app {
+            screen = Playing gs,
+            message = Nothing,
+            seed = nextSeed (seed app) }
+    where 
+        level = createVert (seed app) ToEnd
+
+-- | Switch between horizontal and vertical 
+activateSwitch :: Int -> AppState -> IO AppState
+activateSwitch n app = case screen app of 
+    Playing gs 
+        | gsPaused gs || gsStatus gs /= InProgress -> pure app
+        | otherwise -> case findSwitch n gs of 
+            Nothing -> pure app
+            Just ToVertical -> pure (startVert app gs)
+            Just (ToHorizontal lid) -> contCampaign lid app gs
+            Just ToEnd -> saveWin
+                (app { screen = Playing (gs { gsStatus = Win }) })
+                (gs { gsStatus = Win })
+    Menu -> pure app 
+    
+startVert :: AppState -> GameState -> AppState
+startVert app gs 
+    | not (checkAvail level) = app { message = Just "The generated level is not available." }
+    | otherwise = case mkGameStateMode (gsPlayerSelect gs) (gsMode gs) level of 
+        Left msg -> app { message = Just msg }
+        Right new -> app {
+            screen = Playing (keepHealth gs (new { 
+            gsScore = gsScore gs, 
+            gsStartScore = gsScore gs, 
+            gsDebug = gsDebug gs})),
+        message = Nothing,
+        seed = nextSeed (seed app) }
+    where 
+        level = createVert (seed app) exit
+        exit = case gsMode gs of 
+            Campaign -> case nextLevel (lvlId (gsLevel gs)) of
+                Just lid -> ToHorizontal lid
+                Nothing -> ToEnd
+            LevelSelect -> ToEnd
+            
+-- | Continue campaign: read next level and take scored points with you
+contCampaign :: LevelId -> AppState -> GameState -> IO AppState
+contCampaign lid app prev = do
+    res <- startLevel lid (gsMode prev)
+        (app { playerSelect = gsPlayerSelect prev })
+    case (message res, screen res) of 
+        (Just _, _) -> pure res
+        (Nothing, Playing new) -> do
+            let progress = max (levelUnlocked app) (nLevel lid)
+                cont = res {
+                    screen = Playing (keepHealth prev (new { 
+                        gsScore = gsScore prev,
+                        gsStartScore = gsScore prev, 
+                        gsDebug = gsDebug prev})),
+                    levelUnlocked = progress }
+            if gsMode prev /= Campaign 
+                then pure (cont { levelUnlocked = levelUnlocked app })
+                else do 
+                    result <- try (saveProgress progress) :: IO (Either IOException ())
+                    pure $ case result of 
+                        Left err -> cont { message = Just ("Saving progress failed: " ++ show err) }
+                        Right () -> cont
+        (_, Menu) -> pure res 
+            
+startLevel :: LevelId -> GameMode -> AppState -> IO AppState
+startLevel lid mode  app = do
+    res <- try (loadLevel lid) :: IO (Either IOException Level)
+    pure $ case res of 
+        Left err -> app { message = Just ("Loading level failed: " ++ show err) }
+        Right level -> case mkGameStateMode (playerSelect app) mode level of 
+            Left msg -> app { message = Just msg }
+            Right gs -> app {
+                screen = Playing gs,
+                message = Nothing }
+
+keepHealth :: GameState -> GameState -> GameState
+keepHealth prev new = new {
+    gsPlayers = zipWith keep (gsPlayers prev) (gsPlayers new) }
+    where 
+        keep oldPl newPl = newPl {
+            playerHealth = playerHealth oldPl,
+            playerDead = playerHealth oldPl <= 0}
+            
+restart :: GameState -> GameState
+restart gs = case mkGameStateMode (gsPlayerSelect gs) (gsMode gs) (gsLevel gs) of
+    Left _ -> gs
+    Right new -> new {
+        gsDebug = gsDebug gs,
+        gsScore = gsStartScore gs,
+        gsStartScore = gsStartScore gs }
+        
+-- | Adjust pure function only if game is active     
 mapPlaying :: AppState -> (GameState -> GameState) -> AppState
 mapPlaying app f = case screen app of
-  Playing gs -> app { screen = Playing (f gs) }
-  Menu       -> app
-  
-resetSandbox :: GameState -> GameState
-resetSandbox gs
-  | lvlId (gsLevel gs) == Sandbox = (mkGameState (gsLevel gs)) { gsDebug = gsDebug gs }
-  | otherwise                     = gs
+    Menu       -> app
+    Playing gs -> app { screen = Playing (f gs) }
 
 -- Player 0: WASD. Player 1: arrow keys.
 applyKey :: Key -> Bool -> GameState -> GameState
 applyKey key pressed gs = case key of
-  Char 'a'            -> onPlayer 0 (\i -> i { inLeft  = pressed })
-  Char 'd'            -> onPlayer 0 (\i -> i { inRight = pressed })
-  Char 'w'            -> onPlayer 0 (\i -> i { inJump  = pressed })
-  SpecialKey KeyLeft  -> onPlayer 1 (\i -> i { inLeft  = pressed })
-  SpecialKey KeyRight -> onPlayer 1 (\i -> i { inRight = pressed })
-  SpecialKey KeyUp    -> onPlayer 1 (\i -> i { inJump  = pressed })
-  _                   -> gs
-  where
-    onPlayer n f = gs { gsPlayers = zipWith (upd n f) [0 ..] (gsPlayers gs) }
-    upd n f i pl
-      | i == (n :: Int) = pl { playerIn = f (playerIn pl) }
-      | otherwise       = pl
+    Char 'a'            -> onPlayer 0 (\i -> i { inLeft  = pressed })
+    Char 'd'            -> onPlayer 0 (\i -> i { inRight = pressed })
+    Char 'w'            -> onPlayer 0 (\i -> i { inJump  = pressed })
+    SpecialKey KeyLeft  -> onPlayer 1 (\i -> i { inLeft  = pressed })
+    SpecialKey KeyRight -> onPlayer 1 (\i -> i { inRight = pressed })
+    SpecialKey KeyUp    -> onPlayer 1 (\i -> i { inJump  = pressed })
+    _                   -> gs
+    where
+        onPlayer n f = gs { gsPlayers = zipWith (upd n f) [0 ..] (gsPlayers gs) }
+        upd n f i pl
+            | i == (n :: Int) = pl { playerIn = f (playerIn pl) }
+            | otherwise       = pl
 
+-- | N closes completed campaign or start a new level
+nextStep :: AppState -> IO AppState
+nextStep app = case screen app of 
+    Playing gs 
+        | gsStatus gs == Win && gsMode gs == Campaign -> 
+            case nextLevel (lvlId (gsLevel gs )) of 
+                Just lid -> do 
+                    new <- startLevel lid Campaign app
+                    pure $ case screen new of 
+                        Playing newGame -> new {
+                            screen = Playing (keepHealth gs (newGame { 
+                                gsScore = gsScore gs, 
+                                gsStartScore = gsScore gs })) }
+                        Menu -> new 
+                Nothing -> pure app { screen = Menu }
+    _ -> pure app 
+    
+nLevel :: LevelId -> Int
+nLevel Level1 = 1 
+nLevel Level2 = 2 
+nLevel Level3 = 3 
+nLevel _ = 1 
+
+nextLevel :: LevelId -> Maybe LevelId
+nextLevel Level1 = Just Level2
+nextLevel Level2 = Just Level3
+nextLevel _ = Nothing 
+ 
 stepApp :: Float -> AppState -> IO AppState
-stepApp dt app = pure $ case screen app of
-  Playing gs
-    | reachedFinish gs' -> initialApp (sprites app)   -- level done: back to the menu
-    | otherwise         -> app { screen = Playing gs' }
-    where gs' = stepWorld dt gs
-  Menu -> app
+stepApp dt app = case screen app of 
+    Menu -> pure app 
+    Playing old -> do 
+        let new = stepWorld dt old 
+            cont = app { screen = Playing new }
+        if gsStatus old == InProgress && gsStatus new == Win 
+            then saveWin cont new 
+            else pure cont
 
--- | A living player is inside one of the level's finish boxes.
-reachedFinish :: GameState -> Bool
-reachedFinish gs = or
-  [ overlaps (playerHitbox p) box
-  | p <- gsPlayers gs, not (playerDead p)
-  , box <- lvlFinish (gsLevel gs) ]
+saveWin :: AppState -> GameState -> IO AppState
+saveWin app gs 
+    | lvlId (gsLevel gs) == Sandbox = pure app
+    | otherwise = do 
+        let score = Highscore (lvlId (gsLevel gs)) (gsScore gs)
+            scores = take 10 (sortBy (flip (comparing hsScore)) (score : highscores app))
+            unlocked = max (levelUnlocked app) (nextUnlocked (lvlId (gsLevel gs)))
+        res <- try (saveScores scores >> saveProgress unlocked) :: IO (Either IOException ())
+        case res of 
+            Left err -> pure app { 
+                highscores = scores, 
+                levelUnlocked = unlocked, 
+                message = Just ("Save failed: " ++ show err) }
+            Right () -> pure app { highscores = scores, levelUnlocked = unlocked, message = Nothing }  
+            
+nextUnlocked :: LevelId -> Int
+nextUnlocked Level1 = 2 
+nextUnlocked Level2 = 3
+nextUnlocked _ = 1 
