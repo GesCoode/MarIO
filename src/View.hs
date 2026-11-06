@@ -3,8 +3,6 @@ module View (drawApp) where
 import Graphics.Gloss
 import GameData (AppState (..),  Boss (..),
     GameState (..),
-    GameStatus (..),
-    GameMode (..),
     Goomba (..), 
     GoombaState (..), 
     Hammer (..), 
@@ -18,8 +16,6 @@ import GameData (AppState (..),  Boss (..),
     Screen (..), 
     SpriteAtlas,
     StaticObj (..), 
-    Switch (..),
-    SwitchType (..),
     Vec2 (..), 
     bossHitbox,
     broHitbox, 
@@ -54,6 +50,7 @@ drawApp :: AppState -> IO Picture
 drawApp app = pure $ case screen app of
     Menu       -> drawMenu (playerSelect app)
     Playing gs -> drawPlaying (sprites app) gs
+    Result won score -> drawResult won score (highscores app)
 
 -- | Show level select and player select
 drawMenu :: PlayerSelect -> Picture
@@ -84,6 +81,7 @@ drawPlaying :: SpriteAtlas -> GameState -> Picture
 drawPlaying atlas gs =
     pictures [ 
         color black (rectangleSolid 800 600),
+        drawBackground atlas gs,
         -- everything in the world moves with the camera; the label stays put
         translate (negate (cameraX gs)) (negate (gsCamY gs)) $ pictures [
             pictures (map (drawStatic atlas (gsDebug gs)) (lvlStatics (gsLevel gs))),
@@ -104,6 +102,62 @@ drawFinish hb =
   translate (x (hbCenter hb)) (y (hbCenter hb)) $
     color green $ rectangleWire (hbWidth hb) (hbHeight hb)
 
+-- | One background image.
+data Layer = Layer {
+    lySprite   :: String,
+    lySize     :: (Float, Float),   -- in pixels
+    lyBottom   :: Float,            -- y of the image's bottom edge
+    lyParallax :: Bool}             -- True: parallax (see drawBackground); False: moves with the level
+
+-- | Per level: a fill colour for where no image reaches, and the images back to front.
+backgroundFor :: LevelId -> Maybe (Color, [Layer])
+backgroundFor Level1 = Just (skyBlue,
+    [ Layer "Clouds" (4467, 83) (-300 + 64 + 416 - 166) True   -- clouds high in the sky
+    , Layer "1-1-Background" (3584, 104) (-300 + 64) False ])  -- hills etc., standing on the ground
+backgroundFor Level3 = Just (black, [Layer "BossFightBackground" (208, 63) (-300 - 64) True])
+backgroundFor _      = Nothing
+
+-- | #5C94FC, the sky colour of World 1-1.
+skyBlue :: Color
+skyBlue = makeColorI 0x5C 0x94 0xFC 255
+
+-- | Background: fill colour first, then the layers. Scaled 2x like everything else
+--   (more if needed to cover the 800 px width).
+--   Parallax layer (in screen space): when the camera is at the start of the level its
+--   left edge is at the left of the screen, at the end its right edge is at the right,
+--   so a layer wider than the level scrolls faster than the camera.
+--   Other layers are part of the level: their left edge is at the level's left edge
+--   and they move exactly with the camera.
+drawBackground :: SpriteAtlas -> GameState -> Picture
+drawBackground atlas gs = case backgroundFor (lvlId (gsLevel gs)) of
+    Nothing -> blank
+    Just (fill, layers) -> pictures (color fill (rectangleSolid 800 600) : map layer layers)
+    where
+      (lo, hi) = cameraRange gs
+      layer ly = case lookup (lySprite ly) atlas of
+        Nothing  -> blank
+        Just pic ->
+            let (pw, ph) = lySize ly
+                s  = max 2 (fromIntegral (ceiling (800 / pw) :: Int))
+                bw = pw * s
+                bh = ph * s
+                t  = if hi > lo then (cameraX gs - lo) / (hi - lo) else 0.5
+                left
+                    | lyParallax ly = -400 - t * (bw - 800)          -- screen x of the left edge
+                    | otherwise     = (lo - 400) - cameraX gs        -- level's left edge, on screen
+            in translate (left + bw / 2) (lyBottom ly + bh / 2) (scale s s pic)
+
+-- | Lowest and highest camera x for this level (the camera stays inside the level).
+cameraRange :: GameState -> (Float, Float)
+cameraRange gs
+    | null statics = (0, 0)
+    | right < left = let mid = (left + right) / 2 in (mid, mid)
+    | otherwise    = (left, right)
+    where
+        statics = lvlStatics (gsLevel gs)
+        left    = minimum [x (soCenter s) - soWidth s / 2 | s <- statics] + 400
+        right   = maximum [x (soCenter s) + soWidth s / 2 | s <- statics] - 400
+
 -- | Camera x: midpoint between the living players (all players if none are alive),
 --   kept inside the level so the screen never shows past its left or right edge.
 cameraX :: GameState -> Float
@@ -114,13 +168,10 @@ cameraX gs = clamp (midpoint (map (x . playerPos) followed))
     midpoint [] = 0
     midpoint xs = (minimum xs + maximum xs) / 2
 
-    statics = lvlStatics (gsLevel gs)
-    left    = minimum [x (soCenter s) - soWidth s / 2 | s <- statics] + 400
-    right   = maximum [x (soCenter s) + soWidth s / 2 | s <- statics] - 400
+    (lo, hi) = cameraRange gs
     clamp c
-      | null statics  = c
-      | right < left  = (left + right) / 2   -- level narrower than the screen
-      | otherwise     = max left (min right c)
+      | null (lvlStatics (gsLevel gs)) = c
+      | otherwise = max lo (min hi c)
 
 drawStatic :: SpriteAtlas -> Bool -> StaticObj -> Picture
 drawStatic atlas debug s =
@@ -268,6 +319,25 @@ buttonLabel StartCampaign     = "Campaign"
 buttonColor :: MenuSelect -> Color
 buttonColor (SelectLevel Sandbox) = yellowButton
 buttonColor _                     = grayButton
+
+-- | Game won / game over: the final score and the saved highscores.
+drawResult :: Bool -> Int -> [Highscore] -> Picture
+drawResult won score scores =
+    pictures ([
+        color black (rectangleSolid 800 600),
+        centered 0.45 (if won then yellowButton else red) 190 (if won then "GAME WON" else "GAME OVER"),
+        centered 0.2 white 120 ("YOUR SCORE  " ++ show score),
+        centered 0.15 grayButton 60 "PREVIOUS SCORES"]
+        ++ zipWith scoreLine [1 :: Int ..] (take 8 scores)
+        ++ [centered 0.11 grayButton (-260) "Press any key"])
+    where
+        scoreLine i hs = translate (-170) (20 - 30 * fromIntegral i) $ scale 0.13 0.13 $ color white $
+            text (show i ++ ".  " ++ levelName (hsLevel hs) ++ replicate (14 - length (levelName (hsLevel hs))) ' ' ++ show (hsScore hs))
+
+-- | Text centered horizontally (Gloss characters are about 104 units wide).
+centered :: Float -> Color -> Float -> String -> Picture
+centered s c yPos str =
+    translate (negate (fromIntegral (length str) * 104 * s / 2)) yPos $ scale s s $ color c $ text str
 
 -- | Score (which is also the timer), top right.
 -- | One row of hearts per player under the level name: full hearts for the health

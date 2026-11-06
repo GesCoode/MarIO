@@ -22,8 +22,7 @@ import GameData (
     goombaW,
     goombaHitbox,
     overlaps,
-    playerDead, 
-    playerSpawn)
+    playerDead)
 
 {-
   Adapted and was inspired by the following sources: 

@@ -112,7 +112,8 @@ step dt gs
                   in Vec2 (x (hbCenter h)) (top h + 60)
         top h = y (hbCenter h) + hbHeight h / 2
         movedPlayers = map (stepPlayer dt solids oneWay bottomY respawnAt) (gsPlayers gs)
-        aiGs = stepEnemies dt solids (gs { gsPlayers = movedPlayers })
+        -- enemies treat one-way platforms as floor
+        aiGs = stepEnemies dt (solids ++ oneWay) (gs { gsPlayers = movedPlayers })
         (pAfterGoombas, goombas, ptGoombas) = hitGoombas movedPlayers (gsGoombas aiGs)
         (pAfterBros, bros, ptBros) = stompBros pAfterGoombas (gsBros aiGs)
         (pAfterBoss, boss, ptBoss) = hitBoss pAfterBros (gsBoss aiGs)

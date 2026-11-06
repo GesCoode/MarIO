@@ -7,6 +7,7 @@ module Procedural (
 import Data.List (sortOn)
 
 import GameData (
+    GoombaStart (..),
     Level (..),
     LevelId (..),
     PlayerStart (..),
@@ -30,13 +31,14 @@ createVert seed _ = Level {
     lvlPlayers = [
         PlayerStart (Vec2 (-60) (-215)) (Vec2 0 0),
         PlayerStart (Vec2 60 (-215)) (Vec2 0 0)],
-    lvlGoombas = [],
+    lvlGoombas = goombasOn platforms,
     lvlBros = [],
     lvlGoals = [],
     lvlBosses = [],
     lvlSwitches = [],
-    lvlPlatforms = climb seed}
+    lvlPlatforms = platforms}
     where 
+        platforms = climb seed
         ground = StaticObj (Vec2 0 (-268)) (2 * innerX) 64 "Ground"
         wall side = StaticObj (Vec2 (side * (innerX + 16)) (wallH / 2 - 400)) 32 wallH "Square"
         wallH = finishTop + 1000
@@ -69,6 +71,15 @@ climb = go (-236) 0
                 extra = [ platform (inside 96 (negate xNew)) topNew 96 | s4 `mod` 3 == 0, abs xNew > 150 ]
         platform cx top w = StaticObj (Vec2 cx (top - platformH / 2)) w platformH "Platform"
         inside w cx = max (-innerX + w / 2 + 8) (min (innerX - w / 2 - 8) cx)
+
+-- | A goomba on every third wide platform (not the first few, so the start is calm).
+--   Goombas walk to the edge of their platform and turn around.
+goombasOn :: [StaticObj] -> [GoombaStart]
+goombasOn plats =
+    [ GoombaStart (Vec2 (x (soCenter p)) (top + 15)) (if even i then 1 else -1)
+    | (i, p) <- zip [0 :: Int ..] (sortOn (y . soCenter) plats)
+    , i >= 3, i `mod` 3 == 0, soWidth p >= 128
+    , let top = y (soCenter p) + soHeight p / 2 ]
 
 -- | Check that the platforms stay between the walls and that no gap upwards is
 --   higher than a jump.

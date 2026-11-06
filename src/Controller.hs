@@ -19,6 +19,9 @@ import Physics (stepWorld, findSwitch)
 import Procedural (createVert, nextSeed, checkAvail)
 
 handleEvent :: Event -> AppState -> IO AppState
+-- | Result screen: any key or click goes back to the menu
+handleEvent (EventKey _ Down _ _) app
+    | Result _ _ <- screen app = pure app { screen = Menu, message = Nothing }
 handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
     case screen app of
         Menu -> case hitTestPlayers mouse of
@@ -27,7 +30,7 @@ handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
                 Nothing  -> pure app
                 Just (SelectLevel level) -> startLevel level LevelSelect app
                 Just StartCampaign -> startLevel Level1 Campaign app
-        Playing _ -> pure app
+        _ -> pure app
 
 -- | First player activates with E and second with Enter
 handleEvent (EventKey (Char c) Down _ _) app
@@ -80,7 +83,7 @@ activateSwitch n app = case screen app of
             Just ToEnd -> saveWin
                 (app { screen = Playing (gs { gsStatus = Win }) })
                 (gs { gsStatus = Win })
-    Menu -> pure app 
+    _ -> pure app 
     
 startVert :: AppState -> GameState -> AppState
 startVert app gs 
@@ -124,7 +127,7 @@ contCampaign lid app prev = do
                     pure $ case result of 
                         Left err -> cont { message = Just ("Saving progress failed: " ++ show err) }
                         Right () -> cont
-        (_, Menu) -> pure res 
+        _ -> pure res 
             
 startLevel :: LevelId -> GameMode -> AppState -> IO AppState
 startLevel RandomVertical mode app = pure (startRandom mode app)   -- generated, no file
@@ -157,8 +160,8 @@ restart gs = case mkGameStateMode (gsPlayerSelect gs) (gsMode gs) (gsLevel gs) o
 -- | Adjust pure function only if game is active     
 mapPlaying :: AppState -> (GameState -> GameState) -> AppState
 mapPlaying app f = case screen app of
-    Menu       -> app
     Playing gs -> app { screen = Playing (f gs) }
+    _          -> app
 
 -- Player 0: WASD. Player 1: arrow keys.
 applyKey :: Key -> Bool -> GameState -> GameState
@@ -189,8 +192,9 @@ nextStep app = case screen app of
                             screen = Playing (keepHealth gs (newGame { 
                                 gsScore = gsScore gs, 
                                 gsStartScore = gsScore gs })) }
-                        Menu -> new 
-                Nothing -> pure app { screen = Menu }
+                        _ -> new 
+                -- last level of the campaign: game won
+                Nothing -> pure app { screen = Result True (gsScore gs) }
     _ -> pure app 
     
 nLevel :: LevelId -> Int
@@ -208,20 +212,20 @@ nextLevel _ = Nothing
  
 stepApp :: Float -> AppState -> IO AppState
 stepApp dt app = case screen app of 
-    Menu -> pure app 
     Playing old -> do 
         let new = stepWorld dt old 
             cont = app { screen = Playing new }
         case (gsStatus old, gsStatus new) of
             (InProgress, Win) -> do
                 saved <- saveWin cont new
-                -- campaign: straight on to the next level (menu after the last one);
-                -- otherwise back to the menu
+                -- campaign: straight on to the next level (result screen after the last one);
+                -- a single level: result screen
                 if gsMode new == Campaign
                     then nextStep saved
-                    else pure saved { screen = Menu }
-            (InProgress, Loss) -> pure app { screen = Menu, message = Just "Game over" }
+                    else pure saved { screen = Result True (gsScore new) }
+            (InProgress, Loss) -> pure app { screen = Result False (gsScore new) }
             _ -> pure cont
+    _ -> pure app
 
 saveWin :: AppState -> GameState -> IO AppState
 saveWin app gs 

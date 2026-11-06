@@ -220,7 +220,8 @@ data GameState = GameState {
     gsRng          :: Int,        -- seed for random death arcs
     gsDebug        :: Bool}
 
-data Screen = Menu | Playing GameState
+-- | Result: game won (True) or game over (False), with the final score.
+data Screen = Menu | Playing GameState | Result Bool Int
 
 type SpriteAtlas = [(String, Picture)]
 

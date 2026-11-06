@@ -4,8 +4,12 @@ import Graphics.Gloss (Display (..), Picture, black, color, loadBMP, rectangleSo
 import Graphics.Gloss.Interface.IO.Game (playIO)
 import System.Directory (doesFileExist)
 
+import Data.List (sortBy)
+import Data.Ord (comparing, Down (..))
+
 import Controller (handleEvent, stepApp)
-import GameData (SpriteAtlas, initialApp)
+import GameData (AppState (..), Highscore (..), SpriteAtlas, initialApp)
+import Persistence (loadProgress, loadScores)
 import View (drawApp)
 
 fps :: Int
@@ -22,11 +26,15 @@ loadSprite name path = do
 loadSprites :: IO SpriteAtlas
 loadSprites = do
     mapM (\(n, file) -> loadSprite n ("Assets/" ++ file ++ ".bmp"))
-         ([(n, n) | n <- tileSprites ++ heartSprites ++ bossSprites ++ characterSprites ++ broSprites] ++ goombaSprites)
+         ([(n, n) | n <- tileSprites ++ backgroundSprites ++ heartSprites ++ bossSprites ++ characterSprites ++ broSprites] ++ goombaSprites)
 
 -- Level textures (16x16 tiles, repeated across each block).
 tileSprites :: [String]
 tileSprites = ["Ground", "Square", "Block", "Platform"]
+
+-- Level backgrounds (World 1-1 and the boss fight).
+backgroundSprites :: [String]
+backgroundSprites = ["1-1-Background", "Clouds", "BossFightBackground"]
 
 -- Health display.
 heartSprites :: [String]
@@ -56,11 +64,17 @@ characterSprites =
 main :: IO ()
 main = do
     atlas <- loadSprites
+    -- saved highscores and campaign progress (a missing or broken file just means none)
+    scores <- loadScores
+    progress <- loadProgress
+    let app0 = (initialApp atlas) {
+            highscores = sortBy (comparing (Down . hsScore)) (either (const []) id scores),
+            levelUnlocked = either (const 1) id progress }
     playIO
         (InWindow "MarIO" (800, 600) (100, 100))
         black
         fps
-        (initialApp atlas)
+        app0
         drawApp
         handleEvent
         stepApp
