@@ -31,8 +31,7 @@ import GameData (
     staticHitbox,
     goombaHitbox,
     broHitbox,
-    hammerHitbox,
-    defaultPlayer)
+    hammerHitbox)
 
 -- | One frame: players, goombas, then player/goomba contact.
 stepWorld :: Float -> GameState -> GameState
@@ -73,7 +72,9 @@ step dt gs
         defeatBoss = case boss of 
             Just b -> bossHealth b <= 0
             Nothing -> False 
+        everyoneDefeated = not (null pAfterAttack) && all ((<= 0) . playerHealth) pAfterAttack
         state 
+            | everyoneDefeated = Loss
             | defeatBoss || atGoal = Win
             | otherwise = InProgress
 
@@ -89,11 +90,19 @@ stepPlayer dt solids pl0
         hits pl = find (overlaps (playerHitbox pl)) solids 
         
         respawn pl 
-            | y (playerPos pl) < removeBelowY = defaultPlayer {
-                playerPos = playerSpawn pl,
-                playerSpawn = playerSpawn pl,
-                playerIn = playerIn pl}
-            | otherwise = pl
+            | y (playerPos pl) >= removeBelowY = pl 
+            | playerDead pl && playerHealth pl > 0 = placeBack pl
+            | playerDead pl = pl
+            | otherwise =
+                let hit = killPlayer pl 
+                in if playerHealth hit > 0 then placeBack hit else hit
+        
+        placeBack pl = pl {
+            playerPos = playerSpawn pl,
+            playerVel = Vec2 0 0,
+            playerDead = False,
+            onGround = False,
+            walkPhase = 0}
         
         fallDown pl = pl {
             playerPos = Vec2 (px + vx * dt) (py + vy' * dt),
@@ -180,10 +189,13 @@ bounce pl = pl {
     onGround = False }
 
 killPlayer :: Player -> Player
-killPlayer pl = pl { 
-    playerDead = True, 
-    playerVel = Vec2 0 deathHop, 
-    onGround = False }
+killPlayer pl 
+    | playerDead pl || playerHealth pl <= 0 = pl 
+    | otherwise = pl {
+        playerDead = True,
+        playerHeallth = playerHealth pl - 1,
+        playerVel = Vec2 0 deathHop,
+        onGround = False}
 
 hurtBy :: [Hitbox] -> Player -> Player
 hurtBy dangers p

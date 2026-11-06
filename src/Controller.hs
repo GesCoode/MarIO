@@ -86,10 +86,10 @@ startVert app gs
     | otherwise = case mkGameStateMode (gsPlayerSelect gs) (gsMode gs) level of 
         Left msg -> app { message = Just msg }
         Right new -> app {
-            screen = Playing ( new { 
+            screen = Playing (keepHealth gs (new { 
             gsScore = gsScore gs, 
             gsStartScore = gsScore gs, 
-            gsDebug = gsDebug gs}),
+            gsDebug = gsDebug gs})),
         message = Nothing,
         seed = nextSeed (seed app) }
     where 
@@ -110,10 +110,10 @@ contCampaign lid app prev = do
         (Nothing, Playing new) -> do
             let progress = max (levelUnlocked app) (nLevel lid)
                 cont = res {
-                    screen = Playing (new { 
+                    screen = Playing (keepHealth prev (new { 
                         gsScore = gsScore prev,
                         gsStartScore = gsScore prev, 
-                        gsDebug = gsDebug prev}),
+                        gsDebug = gsDebug prev})),
                     levelUnlocked = progress }
             if gsMode prev /= Campaign 
                 then pure (cont { levelUnlocked = levelUnlocked app })
@@ -134,6 +134,14 @@ startLevel lid mode  app = do
             Right gs -> app {
                 screen = Playing gs,
                 message = Nothing }
+
+keepHealth :: GameState -> GameState -> GameState
+keepHealth prev new = new {
+    gsPlayers = zipWith keep (gsPlayers prev) (gsPlayers new) }
+    where 
+        keep oldPl newPl = newPl {
+            playerHealth = playerHealth oldPl,
+            playerDead = playerHealth oldPl <= 0}
             
 restart :: GameState -> GameState
 restart gs = case mkGameStateMode (gsPlayerSelect gs) (gsMode gs) (gsLevel gs) of
@@ -175,9 +183,9 @@ nextStep app = case screen app of
                     new <- startLevel lid Campaign app
                     pure $ case screen new of 
                         Playing newGame -> new {
-                            screen = Playing (newGame { 
+                            screen = Playing (keepHealth gs (newGame { 
                                 gsScore = gsScore gs, 
-                                gsStartScore = gsScore gs }) }
+                                gsStartScore = gsScore gs })) }
                         Menu -> new 
                 Nothing -> pure app { screen = Menu }
     _ -> pure app 

@@ -117,6 +117,7 @@ data Player = Player {
     onGround  :: Bool,
     playerIn  :: InputHandler,
     playerDead  :: Bool,    -- dying: death sprite, no collisions, respawns below screen
+    playerHealth :: Int,
     playerSpawn :: Vec2,
     facingRight :: Bool,    -- last walking direction
     walkPhase   :: Float}   -- walk cycle progress; frame = floor walkPhase `mod` 3
@@ -239,6 +240,7 @@ defaultPlayer = Player {
     onGround  = False,
     playerIn  = noInput,
     playerDead  = False, 
+    playerHealth = 3,
     playerSpawn = Vec2 0 0,
     facingRight = True,
     walkPhase   = 0}
