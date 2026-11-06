@@ -16,12 +16,15 @@ executable FunctionalProgramming
     import:           warnings
     main-is:          Main.hs
     other-modules:
+        AI
         Controller
         GameData
         LevelLoad
         LevelParser
         Menu
+        Persistence
         Physics
+        Procedural
         View
     build-depends:
         base ^>=4.20.2.0,

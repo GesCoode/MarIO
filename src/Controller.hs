@@ -207,9 +207,16 @@ stepApp dt app = case screen app of
     Playing old -> do 
         let new = stepWorld dt old 
             cont = app { screen = Playing new }
-        if gsStatus old == InProgress && gsStatus new == Win 
-            then saveWin cont new 
-            else pure cont
+        case (gsStatus old, gsStatus new) of
+            (InProgress, Win) -> do
+                saved <- saveWin cont new
+                -- campaign: straight on to the next level (menu after the last one);
+                -- otherwise back to the menu
+                if gsMode new == Campaign
+                    then nextStep saved
+                    else pure saved { screen = Menu }
+            (InProgress, Loss) -> pure app { screen = Menu, message = Just "Game over" }
+            _ -> pure cont
 
 saveWin :: AppState -> GameState -> IO AppState
 saveWin app gs 

@@ -1,6 +1,7 @@
 module Physics ( 
     stepWorld,
-    findSwitch)
+    findSwitch,
+    goalHitbox)
     where
 
 import Data.List (find)
@@ -132,11 +133,12 @@ stepPlayer dt solids pl0
                 Vec2 vx vy = playerVel pl
                 pl1 = pl { playerPos = Vec2 px (py + vy * dt) }
             in case hits pl1 of 
-                Nothing -> pl1 
+                Nothing -> pl1 { onGround = False }
                 Just box -> 
+                    -- moving up: stop under the block; falling: land on top of it
                     let corY 
-                            | vy > 0 = y (hbCenter box) + hbHeight box / 2 + playerH pl / 2
-                            | vy < 0 = y (hbCenter box) - hbHeight box / 2 - playerH pl / 2
+                            | vy > 0 = y (hbCenter box) - hbHeight box / 2 - playerH pl / 2
+                            | vy < 0 = y (hbCenter box) + hbHeight box / 2 + playerH pl / 2
                             | otherwise = py
                     in pl { 
                         playerPos = Vec2 px corY, 
@@ -162,7 +164,7 @@ accel, maxSpeed, friction, jumpSpeed :: Float
 accel = 1500
 maxSpeed = 300
 friction = 1800
-jumpSpeed = 550
+jumpSpeed = 627   -- 550 * sqrt 1.3: jump height grows with speed squared, so this gives 1.3x the height
 
 -- Advance the walk cycle by distance travelled (so faster = quicker animation),
 -- only while on the ground. Standing still resets to the idle frame.

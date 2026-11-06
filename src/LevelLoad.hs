@@ -47,7 +47,7 @@ loadExampleLevel lid path = do
                 Left err -> ioError (userError ("Invalid level (" ++ path ++ "):" ++ err))
                 Right () -> do 
                     -- Check all images
-                    let pictures = [ "Asserts/" ++ soSprite obj ++ ".bmp" 
+                    let pictures = [ "Assets/" ++ soSprite obj ++ ".bmp" 
                                    | obj <- lvlStatics level]
                     existing <- mapM doesFileExist pictures
                     case [name | (name, found) <- zip pictures existing, not found] of 

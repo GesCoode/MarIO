@@ -28,7 +28,9 @@ import GameData (AppState (..),  Boss (..),
     levelName, 
     playerHitbox)
 
+import Physics (goalHitbox)
 import Menu (
+    MenuSelect (..),
     menuButtons,
     menuW,
     menuH,
@@ -81,11 +83,15 @@ drawPlaying :: SpriteAtlas -> GameState -> Picture
 drawPlaying atlas gs =
     pictures [ 
         color black (rectangleSolid 800 600),
-        pictures (map (drawStatic atlas (gsDebug gs)) (lvlStatics (gsLevel gs))),
-        pictures (map (drawGoomba atlas (gsDebug gs)) (gsGoombas gs)),
-        pictures (map (drawBro atlas (gsDebug gs)) (gsBros gs)),
-        pictures (map (drawHammer atlas (gsDebug gs)) (gsHammers gs)),
-        pictures (zipWith (drawPlayer atlas (gsDebug gs)) playerChars (gsPlayers gs)),
+        -- everything in the world moves with the camera; the label stays put
+        translate (negate (cameraX gs)) 0 $ pictures [
+            pictures (map (drawStatic atlas (gsDebug gs)) (lvlStatics (gsLevel gs))),
+            pictures (map (drawGoomba atlas (gsDebug gs)) (gsGoombas gs)),
+            pictures (map (drawBro atlas (gsDebug gs)) (gsBros gs)),
+            pictures (map (drawHammer atlas (gsDebug gs)) (gsHammers gs)),
+            pictures (zipWith (drawPlayer atlas (gsDebug gs)) playerChars (gsPlayers gs)),
+            -- goals are invisible, except as green outlines in the debug view
+            if gsDebug gs then pictures (map (drawFinish . goalHitbox) (lvlGoals (gsLevel gs))) else blank],
         cornerLabel (levelName (lvlId (gsLevel gs)))]
 
 drawFinish :: Hitbox -> Picture
@@ -120,7 +126,7 @@ drawStatic atlas debug s =
     where
         c = soCenter s
         body = case lookup (soSprite s) atlas of
-            Just pic -> pic
+            Just pic -> tiled (soWidth s) (soHeight s) pic
             Nothing  -> color white $ rectangleSolid (soWidth s) (soHeight s)
 
 -- Repeat a 16x16 texture (drawn at 2x, so 32x32) across a w x h block.
@@ -210,16 +216,21 @@ drawHammer atlas debug h =
         c  = hamPos h
         hb = hammerHitbox h
 
-drawButton :: (LevelId, Float) -> Picture
-drawButton (lid, cy) =
+drawButton :: (MenuSelect, Float) -> Picture
+drawButton (choice, cy) =
     translate 0 cy $ 
         pictures [ 
-            color (buttonColor lid) (rectangleSolid menuW menuH),
-            translate (-42) (-6) $ scale 0.14 0.14 $ color black $ text (levelName lid)]
+            color (buttonColor choice) (rectangleSolid menuW menuH),
+            translate (-42) (-6) $ scale 0.14 0.14 $ color black $ text (buttonLabel choice)]
 
-buttonColor :: LevelId -> Color
-buttonColor Sandbox = yellowButton
-buttonColor _       = grayButton
+buttonLabel :: MenuSelect -> String
+buttonLabel (SelectLevel lid) = levelName lid
+buttonLabel StartCampaign     = "Campaign"
+buttonLabel StartRandom       = "Random Level"
+
+buttonColor :: MenuSelect -> Color
+buttonColor (SelectLevel Sandbox) = yellowButton
+buttonColor _                     = grayButton
 
 cornerLabel :: String -> Picture
 cornerLabel label =

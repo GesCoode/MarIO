@@ -273,7 +273,7 @@ mkGameStateMode select mode lvl
         gsStartScore   = 0,
         gsPaused       = False,
         gsRng          = 12345,
-        gsDebug        = True})
+        gsDebug        = False})
 
 staticHitbox :: StaticObj -> Hitbox
 staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object)

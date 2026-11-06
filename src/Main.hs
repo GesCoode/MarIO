@@ -21,8 +21,12 @@ loadSprite name path = do
 
 loadSprites :: IO SpriteAtlas
 loadSprites = do
-    mapM (\(n, file) -> loadSprite n ("assets/" ++ file ++ ".bmp"))
-         ([(n, n) | n <- "block" : characterSprites ++ broSprites] ++ goombaSprites)
+    mapM (\(n, file) -> loadSprite n ("Assets/" ++ file ++ ".bmp"))
+         ([(n, n) | n <- tileSprites ++ characterSprites ++ broSprites] ++ goombaSprites)
+
+-- Level textures (16x16 tiles, repeated across each block).
+tileSprites :: [String]
+tileSprites = ["Ground", "Square", "Block"]
 
 -- Hammer Bro idle/throw poses and the 7 hammer spin frames.
 broSprites :: [String]

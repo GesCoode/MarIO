@@ -127,7 +127,7 @@ nearestPlayer o players = case p of
     [] -> Nothing
     _ -> Just (snd (minimumBy (comparing fst) p))
     where 
-        p = [(distQuad o (playerSpawn player), playerSpawn player)
+        p = [(distQuad o (playerPos player), playerPos player)
             | player <- players, not (playerDead player)]       
 
 distQuad :: Vec2 -> Vec2 -> Float
@@ -172,8 +172,10 @@ stepBro dt players bro
         Vec2 vx vy = broVel bro
         newVy = vy - gravity * dt
         withAnim = bro { broAnim = broAnim bro + dt }
+        -- he only faces left, so only players on his left count
+        onLeft = [p | p <- players, x (playerPos p) < x (broPos bro)]
         targets = do 
-            target <- nearestPlayer (broPos bro) players
+            target <- nearestPlayer (broPos bro) onLeft
             if distQuad (broPos bro) target <= broReach * broReach
                 then Just target else Nothing
         hand = Vec2 (x (broPos bro) - 10) (y (broPos bro) + 30)
@@ -222,5 +224,4 @@ visBro enemy =
 
 visHammer :: Hammer -> Bool
 visHammer hammer = 
-    y (hamPos hammer) > removeBelowY &&
-    abs (x (hamPos hammer)) < 600 
+    y (hamPos hammer) > removeBelowY 
