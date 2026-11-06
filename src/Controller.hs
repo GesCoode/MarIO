@@ -14,12 +14,12 @@ import GameData
     
 import LevelLoad (loadLevel)
 import Menu (MenuSelect (..), hitTest, hitTestPlayers)
-import Persistence (saveScores, saveProgress)
+import Persistence (saveScores)
 import Physics (stepWorld, findSwitch)
 import Procedural (createVert, nextSeed, checkAvail)
 
 handleEvent :: Event -> AppState -> IO AppState
--- | Result screen: any key or click goes back to the menu
+-- Result screen: any key or click goes back to the menu
 handleEvent (EventKey _ Down _ _) app
     | Result _ _ <- screen app = pure app { screen = Menu, message = Nothing }
 handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
@@ -32,7 +32,7 @@ handleEvent (EventKey (MouseButton LeftButton) Down _ mouse) app =
                 Just StartCampaign -> startLevel Level1 Campaign app
         _ -> pure app
 
--- | First player activates with E and second with Enter
+-- First player activates with E and second with Enter
 handleEvent (EventKey (Char c) Down _ _) app
     | toLower c == 'e' = activateSwitch 0 app
 handleEvent (EventKey (SpecialKey KeyEnter) Down _ _) app = 
@@ -41,7 +41,7 @@ handleEvent (EventKey (SpecialKey KeyEnter) Down _ _) app =
 handleEvent (EventKey (SpecialKey KeyEsc) Down _ _) app =
     pure app { screen = Menu, message = Nothing }
 
--- | Pause, toggle, restart, nexy
+-- Pause, toggle, restart, nexy -- super duper nexy
 handleEvent (EventKey (Char c) Down _ _) app
     | toLower c == 'p' = 
         pure (mapPlaying app (\gs -> gs { gsPaused = not (gsPaused gs) }))
@@ -50,12 +50,12 @@ handleEvent (EventKey (Char c) Down _ _) app
     | toLower c == 'r' = pure (mapPlaying app restart)
     | toLower c == 'n' = nextStep app
         
--- | Process pressing and letting go of movement keys 
+-- Process pressing and letting go of movement keys 
 handleEvent (EventKey key keyState _ _) app =
     pure (mapPlaying app (applyKey key (keyState == Down)))
 handleEvent _ app = pure app
 
--- | Generate and start a random level. In the campaign its exit leads to the boss.
+-- Generate and start a random level (in the campaign, winning it leads to the boss).
 startRandom :: GameMode -> AppState -> AppState
 startRandom mode app
     | not (checkAvail level) = app { message = Just "The generated level is not available." }
@@ -66,12 +66,9 @@ startRandom mode app
             message = Nothing,
             seed = nextSeed (seed app) }
     where 
-        level = createVert (seed app) exit
-        exit = case mode of
-            Campaign    -> ToHorizontal Level3
-            LevelSelect -> ToEnd
+        level = createVert (seed app)
 
--- | Switch between horizontal and vertical 
+-- Switch between horizontal and vertical 
 activateSwitch :: Int -> AppState -> IO AppState
 activateSwitch n app = case screen app of 
     Playing gs 
@@ -98,35 +95,20 @@ startVert app gs
         message = Nothing,
         seed = nextSeed (seed app) }
     where 
-        level = createVert (seed app) exit
-        exit = case gsMode gs of 
-            Campaign -> case nextLevel (lvlId (gsLevel gs)) of
-                Just lid -> ToHorizontal lid
-                Nothing -> ToEnd
-            LevelSelect -> ToEnd
+        level = createVert (seed app)
             
--- | Continue campaign: read next level and take scored points with you
+-- Continue campaign: read next level and take scored points with you
 contCampaign :: LevelId -> AppState -> GameState -> IO AppState
 contCampaign lid app prev = do
     res <- startLevel lid (gsMode prev)
         (app { playerSelect = gsPlayerSelect prev })
     case (message res, screen res) of 
         (Just _, _) -> pure res
-        (Nothing, Playing new) -> do
-            let progress = max (levelUnlocked app) (nLevel lid)
-                cont = res {
-                    screen = Playing (keepHealth prev (new { 
-                        gsScore = gsScore prev,
-                        gsStartScore = gsScore prev, 
-                        gsDebug = gsDebug prev})),
-                    levelUnlocked = progress }
-            if gsMode prev /= Campaign 
-                then pure (cont { levelUnlocked = levelUnlocked app })
-                else do 
-                    result <- try (saveProgress progress) :: IO (Either IOException ())
-                    pure $ case result of 
-                        Left err -> cont { message = Just ("Saving progress failed: " ++ show err) }
-                        Right () -> cont
+        (Nothing, Playing new) -> pure res {
+            screen = Playing (keepHealth prev (new { 
+                gsScore = gsScore prev,
+                gsStartScore = gsScore prev, 
+                gsDebug = gsDebug prev})) }
         _ -> pure res 
             
 startLevel :: LevelId -> GameMode -> AppState -> IO AppState
@@ -157,7 +139,7 @@ restart gs = case mkGameStateMode (gsPlayerSelect gs) (gsMode gs) (gsLevel gs) o
         gsScore = gsStartScore gs,
         gsStartScore = gsStartScore gs }
         
--- | Adjust pure function only if game is active     
+-- Adjust pure function only if game is active     
 mapPlaying :: AppState -> (GameState -> GameState) -> AppState
 mapPlaying app f = case screen app of
     Playing gs -> app { screen = Playing (f gs) }
@@ -197,13 +179,6 @@ nextStep app = case screen app of
                 Nothing -> pure app { screen = Result True (gsScore gs) }
     _ -> pure app 
     
-nLevel :: LevelId -> Int
-nLevel Level1 = 1 
-nLevel Level2 = 2 
-nLevel RandomVertical = 2
-nLevel Level3 = 3 
-nLevel _ = 1 
-
 nextLevel :: LevelId -> Maybe LevelId
 nextLevel Level1 = Just RandomVertical
 nextLevel RandomVertical = Just Level3
@@ -218,8 +193,6 @@ stepApp dt app = case screen app of
         case (gsStatus old, gsStatus new) of
             (InProgress, Win) -> do
                 saved <- saveWin cont new
-                -- campaign: straight on to the next level (result screen after the last one);
-                -- a single level: result screen
                 if gsMode new == Campaign
                     then nextStep saved
                     else pure saved { screen = Result True (gsScore new) }
@@ -233,17 +206,7 @@ saveWin app gs
     | otherwise = do 
         let score = Highscore (lvlId (gsLevel gs)) (gsScore gs)
             scores = take 10 (sortBy (flip (comparing hsScore)) (score : highscores app))
-            unlocked = max (levelUnlocked app) (nextUnlocked (lvlId (gsLevel gs)))
-        res <- try (saveScores scores >> saveProgress unlocked) :: IO (Either IOException ())
+        res <- try (saveScores scores) :: IO (Either IOException ())
         case res of 
-            Left err -> pure app { 
-                highscores = scores, 
-                levelUnlocked = unlocked, 
-                message = Just ("Save failed: " ++ show err) }
-            Right () -> pure app { highscores = scores, levelUnlocked = unlocked, message = Nothing }  
-            
-nextUnlocked :: LevelId -> Int
-nextUnlocked Level1 = 2 
-nextUnlocked Level2 = 3
-nextUnlocked RandomVertical = 3
-nextUnlocked _ = 1 
+            Left err -> pure app { highscores = scores, message = Just ("Save failed: " ++ show err) }
+            Right () -> pure app { highscores = scores, message = Nothing }

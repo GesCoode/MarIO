@@ -26,13 +26,13 @@ createLevel lid ids = Level {
     lvlSwitches = lfSwitches ids,
     lvlPlatforms = []}
 
--- | Read Level; parsing continues. 
+-- Read Level
 loadLevel :: LevelId -> IO Level
 loadLevel lid = case levelPath lid of 
     Nothing -> ioError (userError "This level is generated and does not have a file.")
     Just path -> loadExampleLevel lid path
     
--- | Load a level JSON file for the given LevelId.
+-- Load a level JSON file for the given LevelId.
 loadExampleLevel :: LevelId ->FilePath -> IO Level
 loadExampleLevel lid path = do
     exist <- doesFileExist path
@@ -55,12 +55,11 @@ loadExampleLevel lid path = do
                         [] -> pure level
                         missing : _ -> ioError (userError ("Image missing: " ++ missing))
 
--- | UTF-8 BOM that Windows editors often prepend.
 stripBom :: String -> String
 stripBom ('\xfeff' : xs) = xs
 stripBom xs              = xs
 
--- | Check that player doesn't start in static
+-- Extra double checking the player
 validateStartpos :: Level -> Either String ()
 validateStartpos level
     | any overlapStatic (lvlPlayers level) = Left "Player starts inside static."

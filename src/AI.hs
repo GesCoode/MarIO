@@ -17,7 +17,10 @@ import GameData (
     Hammer (..),
     Hitbox (..),
     Boss (..),
+    bossPhase,
     bossW,
+    hbLeft,
+    hbRight,
     goombaH,
     goombaW,
     goombaHitbox,
@@ -38,8 +41,7 @@ import GameData (
 - https://gameprogrammingpatterns.com/update-method.html
 -}
 
--- | Constants (also used in Physics) 
--- Adjust if necessary
+-- | Constants
 gravity, maxFallSpeed, removeBelowY :: Float
 gravity = 1200
 maxFallSpeed = 800
@@ -182,8 +184,7 @@ stepBro dt players bro
         maybeThrow Nothing = []
         maybeThrow (Just target) = [throwAt hand target]
 
--- | Second boss has shorter interval and two hammers
--- Boss timings (seconds) and jump
+-- | Boss timings (seconds) and jump
 bossThrowGap, bossJumpGap, bossVolleyGap, bossRest, bossAirTime :: Float
 bossThrowGap  = 1.8   -- phase 1: one hammer every 1.8 s
 bossJumpGap   = 3.0   -- phase 2: a jump every 3 s
@@ -228,8 +229,8 @@ stepBoss dt pltfrms players boss
         landX tx
             | null pltfrms = tx
             | otherwise    = max (left + bossW / 2) (min (right - bossW / 2) tx)
-        left  = minimum [x (hbCenter h) - hbWidth h / 2 | h <- pltfrms]
-        right = maximum [x (hbCenter h) + hbWidth h / 2 | h <- pltfrms]
+        left  = minimum (map hbLeft pltfrms)
+        right = maximum (map hbRight pltfrms)
 
         fly b =
             let Vec2 px py = bossPos b

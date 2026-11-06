@@ -14,10 +14,10 @@ import GameData (
     SwitchType (..),
     LevelId (..))
 
--- | Parser returns a value and the not-yet processed input. Errors are shown using Left. 
+-- Parser returns a value. Use this for debugging
 type Parser a = String -> Either String (a, String)
 
--- | Read full file. Trailing input is not allowed. 
+-- Read full file
 parseLevelFile :: String -> Either String LevelFile
 parseLevelFile input = do
     (level, rest) <- levelFile (skipSpace input)
@@ -25,16 +25,14 @@ parseLevelFile input = do
         ""       -> validateLevel level
         leftover -> Left ("Unexpected trailing input: " ++ take 40 leftover)
 
--- | Check constraints for full level 
+-- Check constraints for full level 
 validateLevel :: LevelFile -> Either String LevelFile 
 validateLevel level
     | null (lfPlayers level) = Left "Level must contains at least one player's starting position."
     | length (lfGoals level) > 1 = Left "Level may contain max. one goal."
     | length (lfBosses level) > 1 = Left "A level may contain max. one boss."
     | otherwise = Right level
-    
--- | Level contains platforms, players, Goomba's, and Hammer Bros. 
---   Enemy-lists are optional, as well as goals, bosses, and switches.
+
 levelFile :: Parser LevelFile
 levelFile input = do
     ((), s1) <- expect '[' input
@@ -49,15 +47,13 @@ levelFile input = do
     ((), s10) <- expect ']' (skipSpace s9)
     Right (LevelFile statics players goombas bros goals bosses switches, s10)
 
--- | Read an optional list, which is preceded by a comma.
---   Otherwise an empty list.
 optionalList :: Parser a -> Parser [a]
 optionalList item s0 = 
     case skipSpace s0 of
         ',' : rest -> listOf item (skipSpace rest)
         rest       -> Right ([], rest)
 
--- | Read position: [x, y] 
+-- Read position
 readPos :: Parser Vec2
 readPos input = do
     ((), s1) <- expect '[' input
@@ -67,14 +63,13 @@ readPos input = do
     ((), s5) <- expect ']' (skipSpace s4)
     Right (Vec2 cx cy, s5)
     
--- | Read Hammer Bro-startingposition: [x, y].
+-- Read Hammer Bro-starting position
 broStart :: Parser BroStart
 broStart input = do
     (position, rest) <- readPos input
     Right (BroStart position, rest)
 
--- | Read Goomba: [x, y, dir]
---   Direction: -1 (left) or 1 (right).
+-- Read Goomba :: [x, y, dir]
 goombaStart :: Parser GoombaStart
 goombaStart s0 = do
     ((), s1) <- expect '[' s0
@@ -88,7 +83,7 @@ goombaStart s0 = do
         then Right (GoombaStart (Vec2 cx cy) dir, s7)
         else Left "Invalid Goomba direction: use -1 or 1."
 
--- | Read a platform: [x, y, w, h, "sprite"]        
+-- Read platform :: [x, y, w, h, "tex"]        
 staticObj :: Parser StaticObj
 staticObj input = do
     ((), s1) <- expect '[' input
@@ -106,7 +101,7 @@ staticObj input = do
         then Right (StaticObj (Vec2 cx cy) w h sprite, s11)
         else Left "A platform must have positive dimensions and a spritename"
          
--- | Read a player initialisation: [x, y, vx, vy]   
+-- Read a player initialisation :: [x, y, vx, vy]   
 playerStart :: Parser PlayerStart
 playerStart input = do
     ((), s1) <- expect '[' input
@@ -120,8 +115,7 @@ playerStart input = do
     ((), s9) <- expect ']' (skipSpace s8)
     Right (PlayerStart (Vec2 cx cy) (Vec2 vx vy), s9)
 
--- | Parse a list between square brackets.
--- Ending with a comma is not allowed.
+-- Simplify this whole section and stop drinking Red Bull, because oh my god
 listOf :: Parser a -> Parser [a]
 listOf item s0 = do
     ((), s1) <- expect '[' (skipSpace s0)
@@ -139,7 +133,6 @@ listOf item s0 = do
                 ']' : s3 -> Right (reverse (itemVal : acc), s3)
                 _ -> Left "Expected ',' or ']' in a list."
                 
--- | Read a whole or decimal number
 number :: Parser Float
 number s0 = do
     let (n, rest) = case s0 of 
@@ -167,8 +160,7 @@ number s0 = do
                     | not (isNaN value || isInfinite value) -> Right(value, rest)
                 _ -> Left "Invalid or too large digit"
 
--- | Read string between double quotes: "..."
---   No escape sequences
+-- Read string between double quotes: "..."
 stringLit :: Parser String
 stringLit ('"' : rest) = readText [] rest
     where
@@ -180,7 +172,6 @@ stringLit ('"' : rest) = readText [] rest
             | otherwise = readText (c : acc) s
 stringLit _ = Left "Expected string between double quotes."
 
--- | Check if next char corresponds with expected char
 expect :: Char -> Parser ()
 expect c (ch : xs)
     | ch == c   = Right ((), xs)
@@ -190,8 +181,6 @@ expect c []   = Left ("Expected '" ++ [c] ++ "', but got end of input.")
 skipSpace :: String -> String
 skipSpace = dropWhile isSpace
 
--- | Switch: [x, y, "vertical"] or [x, y, "horizontal"]
---   "end" is meant as the end of a random level
 readSwitch :: Parser Switch
 readSwitch input = do
     ((), s1) <- expect '[' input

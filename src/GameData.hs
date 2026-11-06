@@ -2,20 +2,20 @@ module GameData where
 
 import Graphics.Gloss (Picture)
 
--- | 2D point / vector. Object positions use the center.
+-- Why not just use a library
 data Vec2 = Vec2 {
     x :: Float, 
     y :: Float}
     deriving (Eq)
 
--- AABB: center + width + height.
+-- center + width + height.
 data Hitbox = Hitbox {
     hbCenter :: Vec2, 
     hbWidth :: Float, 
     hbHeight :: Float}
     deriving (Eq)
 
--- Static level object (platform, block, …).
+-- Static level object
 data StaticObj = StaticObj {
     soCenter :: Vec2, 
     soWidth :: Float, 
@@ -28,13 +28,13 @@ data PlayerStart = PlayerStart {
     psVel :: Vec2}
     deriving (Eq)
 
--- Goomba spawn: center + walk direction (-1 = left, 1 = right).
+-- Goomba spawn
 data GoombaStart = GoombaStart {
     gsCenter :: Vec2,
     gsDir    :: Float}
     deriving (Eq)
 
--- Hammer Bro spawn: center only (he never moves).
+-- Hammer Bro spawn
 newtype BroStart = BroStart { 
     bsCenter :: Vec2 }
     deriving (Eq)
@@ -64,7 +64,7 @@ data Switch = Switch {
     switchType :: SwitchType}
     deriving (Eq)
     
--- | Parsed level payload (level id comes from which file was loaded).
+-- Parsed level
 data LevelFile = LevelFile {
     lfStatics :: [StaticObj], 
     lfPlayers :: [PlayerStart],
@@ -84,8 +84,11 @@ data Level = Level {
     lvlGoals    :: [Vec2],
     lvlBosses   :: [Vec2],
     lvlSwitches :: [Switch],
-    lvlPlatforms :: [StaticObj]}   -- one-way: jump through from below, stand on top
+    lvlPlatforms :: [StaticObj]}
     deriving (Eq)
+
+
+
 
 -- Controls for player
 data InputHandler = InputHandler {
@@ -117,64 +120,63 @@ data Player = Player {
     playerH   :: Float,
     onGround  :: Bool,
     playerIn  :: InputHandler,
-    playerDead  :: Bool,    -- dying: death sprite, no collisions, respawns below screen
+    playerDead  :: Bool,
     playerHealth :: Int,
     playerSpawn :: Vec2,
-    facingRight :: Bool,    -- last walking direction
-    walkPhase   :: Float}   -- walk cycle progress; frame = floor walkPhase `mod` 3
+    facingRight :: Bool,
+    walkPhase   :: Float}
     deriving (Eq)
 
--- (1) Walking, (2) Squashed: seconds left before it flies off, (3) flying off screen, no collisions
 data GoombaState = Walking | Flat Float | Dying
     deriving (Eq)
 
+-- Characters!
 data Goomba = Goomba {
     gPos   :: Vec2,
     gVel   :: Vec2,
-    gDir   :: Float,   -- -1 left, 1 right
+    gDir   :: Float,
     gState :: GoombaState,
-    gPhase :: Float}   -- walk cycle progress
+    gPhase :: Float}
     deriving (Eq)
 
 data HammerBro = HammerBro {
     broPos      :: Vec2,
-    broCooldown :: Float,        -- seconds until he may start a throw
-    broWindup   :: Maybe Float,  -- Just t: in throw pose (HT), t seconds left
-    broAnim     :: Float,        -- time, drives the idle animation
-    broDead     :: Bool,         -- stomped: upside down, falling off screen
-    broVel      :: Vec2}         -- only used while dead
+    broCooldown :: Float,
+    broWindup   :: Maybe Float,
+    broAnim     :: Float,
+    broDead     :: Bool,
+    broVel      :: Vec2}
     deriving (Eq)
 
 data Hammer = Hammer {
     hamPos  :: Vec2,
     hamVel  :: Vec2,
-    hamAnim :: Float}   -- time, drives the spin animation
+    hamAnim :: Float}
     deriving (Eq)
 
 data Boss = Boss {
     bossPos :: Vec2,
     bossHealth :: Int,
-    bossPhase :: Int,
     bossCooldown :: Float,
     bossInvisible :: Float,
-    bossVel :: Vec2,      -- only used while jumping
-    bossHomeY :: Float,   -- floor height he lands back on
+    bossVel :: Vec2,
+    bossHomeY :: Float,
     bossJumping :: Bool,
-    bossVolleys :: Int,   -- phase 3: hammer pairs thrown in the current burst
-    bossAnim :: Float}    -- time, drives the BT0/BT1 animation
+    bossVolleys :: Int,
+    bossAnim :: Float}
     deriving (Eq)
     
 goombaW, goombaH :: Float
-goombaW = 28   -- sprites are 14x15, drawn at 2x
+goombaW = 28
 goombaH = 30
 
 broW, broH, hammerSize :: Float
-broW       = 36   -- idle sprite is 24x32 drawn at 2x; hitbox a bit narrower
+broW       = 36
 broH       = 60
-hammerSize = 20   -- sprite is 16x16 drawn at 2x; hitbox smaller
+hammerSize = 20
 
 bossW, bossH :: Float
-bossW = 42 -- sprites are 16x24, drawn at 3x (48x72); hitbox a bit narrower
+bossW = 42
 bossH = 72
 
 spawnGoomba :: GoombaStart -> Goomba
@@ -186,7 +188,10 @@ spawnBro :: BroStart -> HammerBro
 spawnBro s = HammerBro (bsCenter s) 0 Nothing 0 False (Vec2 0 0)
 
 spawnBoss :: Vec2 -> Boss
-spawnBoss pos = Boss pos 3 1 1.5 0 (Vec2 0 0) (y pos) False 0 0
+spawnBoss pos = Boss pos 3 1.5 0 (Vec2 0 0) (y pos) False 0 0
+
+bossPhase :: Boss -> Int
+bossPhase b = 4 - bossHealth b
 
 goombaHitbox :: Goomba -> Hitbox
 goombaHitbox gb = Hitbox (gPos gb) goombaW goombaH
@@ -205,22 +210,21 @@ data GameState = GameState {
     gsPlayerSelect :: PlayerSelect,
     gsMode         :: GameMode,
     gsStatus       :: GameStatus,
-    gsPlayers      :: [Player],   -- index 0 = WASD, index 1 = arrows
+    gsPlayers      :: [Player],
     gsGoombas      :: [Goomba],
     gsBros         :: [HammerBro],
     gsHammers      :: [Hammer],
     gsBoss         :: Maybe Boss,
-    gsScore        :: Int,        -- starts at startScore, -1 every second, + points for kills
+    gsScore        :: Int,
     gsStartScore   :: Int,
-    gsClock        :: Float,      -- time since the score last ticked down
-    gsCamY         :: Float,      -- camera height (only moves in the Random level)
-    gsRise         :: Maybe Float,  -- Random level: seconds the camera has been rising
-    gsFinishY      :: Maybe Float,  -- Random level: top of the finish platform, once it is there
+    gsClock        :: Float,
+    gsCamY         :: Float,
+    gsRise         :: Maybe Float,
     gsPaused       :: Bool,
-    gsRng          :: Int,        -- seed for random death arcs
+    gsRng          :: Int,
     gsDebug        :: Bool}
 
--- | Result: game won (True) or game over (False), with the final score.
+-- Result: game won (T) or game over (F), with the final score.
 data Screen = Menu | Playing GameState | Result Bool Int
 
 type SpriteAtlas = [(String, Picture)]
@@ -231,7 +235,6 @@ data AppState = AppState {
     playerSelect  :: PlayerSelect,
     message       :: Maybe String,
     highscores        :: [Highscore],
-    levelUnlocked :: Int,
     seed          :: Int}
 
 data Highscore = Highscore {
@@ -240,14 +243,14 @@ data Highscore = Highscore {
     deriving (Eq)
     
 initialApp :: SpriteAtlas -> AppState
-initialApp atlas = AppState Menu atlas SinglePlayer Nothing [] 1 12345
+initialApp atlas = AppState Menu atlas SinglePlayer Nothing [] 12345
 
 defaultPlayer :: Player
 defaultPlayer = Player { 
     playerPos = Vec2 0 0, 
     playerVel = Vec2 0 0, 
     playerW   = 32, 
-    playerH   = 42,          -- sprites are 16x21, drawn at 2x
+    playerH   = 42,
     onGround  = False,
     playerIn  = noInput,
     playerDead  = False, 
@@ -265,18 +268,25 @@ spawnPlayer ps = defaultPlayer {
 mkGameState :: PlayerSelect -> Level ->  Either String GameState
 mkGameState select = mkGameStateMode select LevelSelect
 
--- | Random level: once a player jumps, the camera rises at riseSpeed for riseDuration
---   seconds. Then a full-width finish platform appears with its top at finishTop.
+halfW, halfH :: Float
+halfW = 400
+halfH = 300
+
+-- Sprites and textures are drawn at twice their pixel size.
+pixelScale :: Float
+pixelScale = 2
+
+-- Random level: once a player jumps, the camera rises at riseSpeed for riseDuration
 riseSpeed, riseDuration, finishTop :: Float
 riseSpeed    = 50
 riseDuration = 60
 finishTop    = riseSpeed * riseDuration + 200
 
--- | Hearts each player starts with.
+-- Hearts each player starts with.
 maxHealth :: Int
 maxHealth = 3
 
--- | The score is also the timer: it starts here and drops by 1 every second.
+-- The score is also the timer
 startScore :: Int
 startScore = 300
 
@@ -300,7 +310,6 @@ mkGameStateMode select mode lvl
         gsClock        = 0,
         gsCamY         = 0,
         gsRise         = Nothing,
-        gsFinishY      = Nothing,
         gsPaused       = False,
         gsRng          = 12345,
         gsDebug        = False})
@@ -311,7 +320,16 @@ staticHitbox object = Hitbox (soCenter object) (soWidth object) (soHeight object
 playerHitbox :: Player -> Hitbox
 playerHitbox player = Hitbox (playerPos player) (playerW player) (playerH player)
 
--- | AABB-overlap: collision at edge does not count as overlap
+-- Edges of a box.
+hbTop, hbBottom, hbLeft, hbRight :: Hitbox -> Float
+hbTop h    = y (hbCenter h) + hbHeight h / 2
+hbBottom h = y (hbCenter h) - hbHeight h / 2
+hbLeft h   = x (hbCenter h) - hbWidth h / 2
+hbRight h  = x (hbCenter h) + hbWidth h / 2
+
+soTop :: StaticObj -> Float
+soTop = hbTop . staticHitbox
+
 overlaps :: Hitbox -> Hitbox -> Bool
 overlaps a b =
   abs (x (hbCenter a) - x (hbCenter b)) < (hbWidth a + hbWidth b) / 2 &&

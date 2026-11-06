@@ -1,26 +1,21 @@
 module Persistence (
     loadScores,
     saveScores, 
-    loadProgress,
-    saveProgress,
     viewScores,
     writeScores) where
     
 import Control.Exception (IOException, evaluate, try)
 import Data.List (intercalate)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
-import Text.Read (readMaybe)
 import Text.ParserCombinators.ReadP (
     ReadP, between, char, eof, readP_to_S, 
     readS_to_P, sepBy, skipSpaces)
 import GameData (Highscore (..), LevelId (..))
 
--- | Both files are JSON
-scorePath, progPath :: FilePath
+scorePath :: FilePath
 scorePath = "Saves/scores.json"
-progPath = "Saves/prog.json"
 
--- | Change scores into JSON format
+-- Change scores into JSON format
 writeScores :: [Highscore] -> String
 writeScores scores = "[" ++ intercalate "," (map writeScore scores) ++ "]\n"
     where 
@@ -36,7 +31,7 @@ viewScores input =
         where 
             parser = skipSpaces *> list readScore <* skipSpaces <* eof  
 
--- | Read one highscore 
+-- | Read highscore 
 readScore :: ReadP Highscore
 readScore = between (token '[') (token ']') $ do
     name <- skipSpaces *> readS_to_P reads <* skipSpaces
@@ -56,7 +51,7 @@ list parser = between (token '[') (token ']') (sepBy parser (token ','))
 token :: Char -> ReadP Char
 token c = skipSpaces *> char c <* skipSpaces
 
--- | Load Scores or Progress Files
+-- Load a save file
 loadPersFile :: FilePath -> a -> (String -> Either String a) -> IO (Either String a)
 loadPersFile path standard parser = do 
     exist <- doesFileExist path
@@ -66,7 +61,7 @@ loadPersFile path standard parser = do
             content <- safeRead path
             pure (content >>= parser)
 
--- | Read file and catch errs
+-- Read file and catch errs
 safeRead :: FilePath -> IO (Either String String)
 safeRead path = do 
     res <- try $ do 
@@ -77,7 +72,7 @@ safeRead path = do
         Left err -> Left ("Reading file failed: " ++ show err)
         Right content -> Right content 
 
--- | Write text to file 
+-- Write text to file 
 savePersFile :: FilePath -> String -> IO ()
 savePersFile path input = do 
     createDirectoryIfMissing True "Saves"
@@ -88,16 +83,3 @@ loadScores = loadPersFile scorePath [] viewScores
 
 saveScores :: [Highscore] -> IO ()
 saveScores scores = savePersFile scorePath (writeScores scores)
-
-loadProgress :: IO (Either String Int)
-loadProgress = loadPersFile progPath 1 readProgress
-
-readProgress :: String -> Either String Int 
-readProgress content = 
-    case readMaybe content of 
-        Just n
-            | n >= 1 && n <= 3 -> Right n
-        _ -> Left "file does not have valid level ID."
-
-saveProgress :: Int -> IO ()
-saveProgress n = savePersFile progPath (show (max 1 (min 3 n)) ++ "\n")
